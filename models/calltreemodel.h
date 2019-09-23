@@ -3,8 +3,8 @@
 
 #include <QAbstractItemModel>
 #include <QHash>
-#include <redasm/disassembler/disassemblerapi.h>
-#include <redasm/plugins/assembler/printer.h>
+#include <redasm/disassembler/disassembler.h>
+#include <redasm/plugins/assembler/printer/printer.h>
 #include <redasm/disassembler/listing/listingdocument.h>
 
 class CallTreeModel : public QAbstractItemModel
@@ -37,11 +37,11 @@ class CallTreeModel : public QAbstractItemModel
         int rowCount(const QModelIndex& parent) const override;
 
     private:
-        REDasm::PrinterPtr m_printer;
+        REDasm::object_ptr<REDasm::Printer> m_printer;
         REDasm::DisassemblerPtr m_disassembler;
         REDasm::ListingItem* m_root;
         QHash<REDasm::ListingItem*, s32> m_depths;
-        QHash<REDasm::ListingItem*, REDasm::ListingItems> m_children;
+        QHash<REDasm::ListingItem*, REDasm::SortedList> m_children;
         QHash<REDasm::ListingItem*, REDasm::ListingItem*> m_parents;
 };
 

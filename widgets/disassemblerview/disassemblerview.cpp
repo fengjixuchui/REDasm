@@ -4,6 +4,10 @@
 #include "../../dialogs/referencesdialog/referencesdialog.h"
 #include "../../themeprovider.h"
 #include "../../redasmsettings.h"
+#include <redasm/context.h>
+#include <redasm/support/utils.h>
+#include <redasm/plugins/loader/loader.h>
+#include <redasm/plugins/assembler/assembler.h>
 #include <QHexView/document/buffer/qmemoryrefbuffer.h>
 #include <QMessageBox>
 #include <QPushButton>
@@ -26,15 +30,15 @@ DisassemblerView::DisassemblerView(QLineEdit *lefilter, QWidget *parent) : QWidg
     ui->stackedWidget->addWidget(m_listingview);
     ui->stackedWidget->addWidget(m_graphview);
 
-    m_importsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItem::SymbolItem, ui->tvImports);
+    m_importsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItemType::SymbolItem, ui->tvImports);
     static_cast<SymbolTableModel*>(m_importsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::ImportMask);
     ui->tvImports->setModel(m_importsmodel);
 
-    m_exportsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItem::AllItems, ui->tvExports);
+    m_exportsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItemType::AllItems, ui->tvExports);
     static_cast<SymbolTableModel*>(m_exportsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::ExportMask);
     ui->tvExports->setModel(m_exportsmodel);
 
-    m_stringsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItem::SymbolItem, ui->tvStrings);
+    m_stringsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItemType::SymbolItem, ui->tvStrings);
     static_cast<SymbolTableModel*>(m_stringsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::StringMask);
     ui->tvStrings->setModel(m_stringsmodel);
 
@@ -117,9 +121,9 @@ DisassemblerView::DisassemblerView(QLineEdit *lefilter, QWidget *parent) : QWidg
 }
 
 DisassemblerView::~DisassemblerView() { delete ui; }
-REDasm::DisassemblerAPI *DisassemblerView::disassembler() { return m_disassembler.get(); }
+REDasm::Disassembler *DisassemblerView::disassembler() { return m_disassembler.get(); }
 
-void DisassemblerView::bindDisassembler(REDasm::DisassemblerAPI *disassembler, bool fromdatabase)
+void DisassemblerView::bindDisassembler(REDasm::Disassembler *disassembler, bool fromdatabase)
 {
     m_disassembler = REDasm::DisassemblerPtr(disassembler); // Take ownership
 
@@ -138,15 +142,15 @@ void DisassemblerView::bindDisassembler(REDasm::DisassemblerAPI *disassembler, b
 
     ui->stackedWidget->currentWidget()->setFocus();
 
-    EVENT_CONNECT(m_disassembler, busyChanged, this, [&]() {
+    m_disassembler->busyChanged.connect(this, [&](REDasm::EventArgs*) {
         QMetaObject::invokeMethod(this, "checkDisassemblerStatus", Qt::QueuedConnection);
     });
 
-    EVENT_CONNECT(m_disassembler->document()->cursor(), backChanged, this, [=]() {
+    m_disassembler->document()->cursor()->backChanged.connect(this, [&](REDasm::EventArgs*) {
         m_actions->setEnabled(DisassemblerViewActions::BackAction, m_disassembler->document()->cursor()->canGoBack());
     });
 
-    EVENT_CONNECT(m_disassembler->document()->cursor(), forwardChanged, this, [=]() {
+    m_disassembler->document()->cursor()->forwardChanged.connect(this, [&](REDasm::EventArgs*) {
         m_actions->setEnabled(DisassemblerViewActions::ForwardAction, m_disassembler->document()->cursor()->canGoForward());
     });
 
@@ -172,9 +176,9 @@ void DisassemblerView::hideActions()
 
 void DisassemblerView::changeDisassemblerStatus()
 {
-    if(m_disassembler->state() == REDasm::Job::ActiveState)
+    if(m_disassembler->state() == REDasm::JobState::ActiveState)
         m_disassembler->pause();
-    else if(m_disassembler->state() == REDasm::Job::PausedState)
+    else if(m_disassembler->state() == REDasm::JobState::PausedState)
         m_disassembler->resume();
 }
 
@@ -234,17 +238,17 @@ void DisassemblerView::goTo(const QModelIndex &index)
     if(!index.isValid())
         return;
 
-    const REDasm::ListingItem* item = this->itemFromIndex(index);
+    REDasm::ListingItem item = this->itemFromIndex(index);
 
-    if(!item)
+    if(item.isValid())
         return;
 
-    m_disassembler->document()->goTo(item);
+    //FIXME: m_disassembler->document()->goTo(item);
 
-    if(!m_graphview->isCursorInGraph())
-        ui->stackedWidget->setCurrentWidget(m_listingview);
+    //FIXME: if(!m_graphview->isCursorInGraph())
+    //FIXME:     ui->stackedWidget->setCurrentWidget(m_listingview);
 
-    this->showListingOrGraph();
+    //FIXME: this->showListingOrGraph();
 }
 
 void DisassemblerView::showModelReferences()
@@ -252,22 +256,22 @@ void DisassemblerView::showModelReferences()
     if(!m_currentindex.isValid())
         return;
 
-    const REDasm::ListingItem* item = this->itemFromIndex(m_currentindex);
+    //FIXME: const REDasm::ListingItem* item = this->itemFromIndex(m_currentindex);
 
-    if(!item)
-        return;
+    //FIXME: if(!item)
+    //FIXME:     return;
 
-    const REDasm::Symbol* symbol = nullptr;
+    //FIXME: const REDasm::Symbol* symbol = nullptr;
 
-    if(m_currentindex.model() == m_docks->callTreeModel())
-    {
-        REDasm::InstructionPtr instruction = m_disassembler->document()->instruction(item->address);
-        symbol = m_disassembler->document()->symbol(m_disassembler->getTarget(instruction->address));
-    }
-    else
-        symbol = m_disassembler->document()->symbol(item->address);
+    //FIXME: if(m_currentindex.model() == m_docks->callTreeModel())
+    //FIXME: {
+    //FIXME:     REDasm::CachedInstruction instruction = m_disassembler->document()->instruction(item->address());
+    //FIXME:     symbol = m_disassembler->document()->symbol(m_disassembler->getTarget(instruction->address));
+    //FIXME: }
+    //FIXME: else
+    //FIXME:     symbol = m_disassembler->document()->symbol(item->address());
 
-    this->showReferences(symbol->address);
+    //FIXME: this->showReferences(symbol->address);
 }
 
 void DisassemblerView::showCurrentItemInfo()
@@ -293,9 +297,7 @@ void DisassemblerView::showReferences(address_t address)
 
     connect(&dlgreferences, &ReferencesDialog::jumpTo, this, [&](address_t address) {
         if(ui->stackedWidget->currentWidget() == m_graphview) {
-            auto it = m_disassembler->document()->instructionItem(address);
-
-            if(it != m_disassembler->document()->end()) {
+            if(m_disassembler->document()->instructionItem(address)) {
                 m_graphview->goTo(address);
                 return;
             }
@@ -316,15 +318,15 @@ void DisassemblerView::displayAddress(address_t address)
         return;
 
     REDasm::ListingDocument& document = m_disassembler->document();
-    REDasm::LoaderPlugin* loader = m_disassembler->loader();
-    REDasm::AssemblerPlugin* assembler = m_disassembler->assembler();
+    REDasm::Loader* loader = m_disassembler->loader();
+    REDasm::Assembler* assembler = m_disassembler->assembler();
     const REDasm::Segment* segment = document->segment(address);
     const REDasm::Symbol* functionstart = document->functionStartSymbol(address);
     offset_location offset = loader->offset(address);
 
     QString segm = segment ? S_TO_QS(segment->name) : "UNKNOWN",
-            offs = segment && offset.valid ? S_TO_QS(REDasm::hex(offset, assembler->bits())) : "UNKNOWN",
-            addr = S_TO_QS(REDasm::hex(address, assembler->bits()));
+            offs = segment && offset.valid ? S_TO_QS(REDasm::String::hex(offset.value, assembler->bits())) : "UNKNOWN",
+            addr = S_TO_QS(REDasm::String::hex(address, assembler->bits()));
 
     QString s = QString::fromWCharArray(L"<b>Address: </b>%1\u00A0\u00A0").arg(addr);
     s += QString::fromWCharArray(L"<b>Offset: </b>%1\u00A0\u00A0").arg(offs);
@@ -335,20 +337,20 @@ void DisassemblerView::displayAddress(address_t address)
         QString func = S_TO_QS(functionstart->name);
 
         if(address > functionstart->address)
-            func += "+" + S_TO_QS(REDasm::hex(address - functionstart->address, 8));
+            func += "+" + S_TO_QS(REDasm::String::hex(address - functionstart->address, 8));
         else if(address < functionstart->address)
-            func += S_TO_QS(REDasm::hex<REDasm::signed_of<size_t>::type>(address - functionstart->address));
+            func += S_TO_QS(REDasm::String::hex<REDasm::signed_of<size_t>::type>(address - functionstart->address));
 
         s = QString::fromWCharArray(L"<b>Function: </b>%1\u00A0\u00A0").arg(func) + s;
     }
 
-    REDasm::status(s.toStdString());
+    r_ctx->status(qUtf8Printable(s));
 }
 
 void DisassemblerView::displayCurrentReferences()
 {
-    REDasm::ListingDocument& document = m_disassembler->document();
-    std::string word = this->currentWord();
+    auto& document = m_disassembler->documentNew();
+    REDasm::String word = this->currentWord();
 
     if(!word.empty())
     {
@@ -361,8 +363,8 @@ void DisassemblerView::displayCurrentReferences()
         }
     }
 
-    REDasm::ListingItem* item = document->itemAt(document->cursor()->currentLine());
-    m_docks->referencesModel()->xref(item->address);
+    REDasm::ListingItem item = document->itemAt(document->cursor().currentLine());
+    m_docks->referencesModel()->xref(item.address_new);
 }
 
 void DisassemblerView::switchGraphListing()
@@ -481,19 +483,19 @@ void DisassemblerView::showGoto()
 void DisassemblerView::goForward() { m_disassembler->document()->cursor()->goForward(); }
 void DisassemblerView::goBack() { m_disassembler->document()->cursor()->goBack(); }
 
-const REDasm::ListingItem *DisassemblerView::itemFromIndex(const QModelIndex &index) const
+REDasm::ListingItem DisassemblerView::itemFromIndex(const QModelIndex &index) const
 {
     const ListingFilterModel* filtermodel = dynamic_cast<const ListingFilterModel*>(index.model());
 
     if(filtermodel)
         return filtermodel->item(index);
 
-    const GotoModel* gotomodel = dynamic_cast<const GotoModel*>(index.model());
+    //FIXME: const GotoModel* gotomodel = dynamic_cast<const GotoModel*>(index.model());
 
-    if(gotomodel)
-        return reinterpret_cast<REDasm::ListingItem*>(index.internalPointer());
+    //FIXME: if(gotomodel)
+    //FIXME:     return reinterpret_cast<REDasm::ListingItem*>(index.internalPointer());
 
-    return nullptr;
+    return REDasm::ListingItem();
 }
 
 void DisassemblerView::syncHexEdit()
@@ -502,26 +504,26 @@ void DisassemblerView::syncHexEdit()
     const REDasm::ListingItem* item = document->currentItem();
 
     offset_location offset;
-    u64 len = 0;
+    size_t len = 0;
 
     if(item)
     {
-        offset = m_disassembler->loader()->offset(item->address);
+        offset = m_disassembler->loader()->offset(item->address_new);
 
         bool canbeinstruction = true;
         const REDasm::Symbol* symbol = nullptr;
 
-        if(item->is(REDasm::ListingItem::SymbolItem))
+        if(item->is(REDasm::ListingItemType::SymbolItem))
         {
-            symbol = document->symbol(item->address);
+            symbol = document->symbol(item->address_new);
             canbeinstruction = symbol->is(REDasm::SymbolType::Code);
         }
-        else if(item->is(REDasm::ListingItem::SegmentItem))
+        else if(item->is(REDasm::ListingItemType::SegmentItem))
             canbeinstruction = false;
 
         if(canbeinstruction)
         {
-            REDasm::InstructionPtr instruction = document->instruction(item->address);
+            REDasm::CachedInstruction instruction = document->instruction(item->address_new);
 
             if(!instruction)
                 return;
@@ -566,7 +568,7 @@ ListingFilterModel *DisassemblerView::getSelectedFilterModel()
     return nullptr;
 }
 
-std::string DisassemblerView::currentWord() const
+REDasm::String DisassemblerView::currentWord() const
 {
     if(ui->stackedWidget->currentWidget() == m_graphview)
         return m_graphview->currentWord();

@@ -2,7 +2,7 @@
 #define GOTODIALOG_H
 
 #include <QDialog>
-#include <redasm/disassembler/disassemblerapi.h>
+#include <redasm/disassembler/disassembler.h>
 #include "../../models/gotomodel/gotofiltermodel.h"
 
 namespace Ui {

@@ -1,11 +1,13 @@
 #include "disassemblergraphview.h"
 #include "../../../models/disassemblermodel.h"
 #include "../../../redasmsettings.h"
+#include "../../../convert.h"
 #include <redasm/graph/layout/layeredlayout.h>
+#include <redasm/support/utils.h>
+#include <redasm/context.h>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QPainter>
-#include <QDebug>
 #include <QAction>
 
 DisassemblerGraphView::DisassemblerGraphView(QWidget *parent): GraphView(parent), m_currentfunction(nullptr)
@@ -24,7 +26,7 @@ DisassemblerGraphView::DisassemblerGraphView(QWidget *parent): GraphView(parent)
 
 DisassemblerGraphView::~DisassemblerGraphView()
 {
-    EVENT_DISCONNECT(m_disassembler->document()->cursor(), positionChanged, this);
+    m_disassembler->document()->cursor()->positionChanged.disconnect(this);
 
     this->killTimer(m_blinktimer);
     m_blinktimer = -1;
@@ -34,7 +36,7 @@ void DisassemblerGraphView::setDisassembler(const REDasm::DisassemblerPtr &disas
 {
     GraphView::setDisassembler(disassembler);
 
-    EVENT_CONNECT(m_disassembler->document()->cursor(), positionChanged, this, [&]() {
+    m_disassembler->document()->cursor()->positionChanged.connect(this, [&](REDasm::EventArgs*) {
         if(!this->isVisible())
             return;
 
@@ -47,10 +49,10 @@ void DisassemblerGraphView::setDisassembler(const REDasm::DisassemblerPtr &disas
 
 bool DisassemblerGraphView::isCursorInGraph() const { return this->itemFromCurrentLine() != nullptr; }
 
-std::string DisassemblerGraphView::currentWord()
+REDasm::String DisassemblerGraphView::currentWord()
 {
     if(!this->selectedItem())
-        return std::string();
+        return REDasm::String();
 
     return static_cast<DisassemblerBlockItem*>(this->selectedItem())->currentWord();
 }
@@ -59,9 +61,8 @@ void DisassemblerGraphView::computeLayout()
 {
     m_disassembleractions->setCurrentRenderer(nullptr);
 
-    for(const auto& n : this->graph()->nodes())
-    {
-        const auto* fbb = static_cast<const REDasm::Graphing::FunctionGraph*>(this->graph())->data(n);
+    this->graph()->nodes().each([&](REDasm::Node n) {
+        const REDasm::FunctionBasicBlock* fbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(n));
         auto* dbi = new DisassemblerBlockItem(fbb, m_disassembler, n, this->viewport());
         connect(dbi, &DisassemblerBlockItem::followRequested, this, &DisassemblerGraphView::onFollowRequested);
         connect(dbi, &DisassemblerBlockItem::menuRequested, this, &DisassemblerGraphView::onMenuRequested);
@@ -69,13 +70,12 @@ void DisassemblerGraphView::computeLayout()
         m_items[n] = dbi;
         this->graph()->width(n, dbi->width());
         this->graph()->height(n, dbi->height());
-    }
+    });
 
-    for(const auto& e : this->graph()->edges())
-    {
-        this->graph()->color(e, this->getEdgeColor(e).name().toStdString());
+    this->graph()->edges().each([&](const REDasm::Edge& e) {
+        this->graph()->color(e, qUtf8Printable(this->getEdgeColor(e).name()));
         this->graph()->label(e, this->getEdgeLabel(e));
-    }
+    });
 
     REDasm::Graphing::LayeredLayout ll(this->graph());
     ll.execute();
@@ -124,7 +124,7 @@ void DisassemblerGraphView::focusCurrentBlock()
 bool DisassemblerGraphView::renderGraph()
 {
     auto& document = m_disassembler->document();
-    const REDasm::ListingItem* currentfunction = document->functionStart(document->currentItem());
+    REDasm::ListingItem* currentfunction = document->functionStart(document->currentItem());
 
     if(!currentfunction)
         return false;
@@ -133,11 +133,12 @@ bool DisassemblerGraphView::renderGraph()
         return true;
 
     m_currentfunction = currentfunction;
-    auto* graph = document->functions().graph(currentfunction);
+    auto* graph = document->functions()->graph(currentfunction->address_new);
 
     if(!graph)
     {
-        REDasm::log("Graph creation failed @ " + REDasm::hex(currentfunction->address));
+        m_currentfunction = nullptr;
+        r_ctx->log("Graph creation failed @ " + REDasm::String::hex(currentfunction->address_new));
         return false;
     }
 
@@ -199,32 +200,32 @@ void DisassemblerGraphView::selectedItemChangedEvent()
     GraphView::selectedItemChangedEvent();
 }
 
-QColor DisassemblerGraphView::getEdgeColor(const REDasm::Graphing::Edge &e) const
+QColor DisassemblerGraphView::getEdgeColor(const REDasm::Edge& e) const
 {
-    const REDasm::Graphing::FunctionBasicBlock* fbb = static_cast<const REDasm::Graphing::FunctionGraph*>(this->graph())->data(e.source);
-    return THEME_VALUE(QString::fromStdString(fbb->style(e.target)));
+    const REDasm::FunctionBasicBlock* fbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.source));
+    return THEME_VALUE(Convert::to_qstring(fbb->style(e.target)));
 }
 
-std::string DisassemblerGraphView::getEdgeLabel(const REDasm::Graphing::Edge &e) const
+REDasm::String DisassemblerGraphView::getEdgeLabel(const REDasm::Edge& e) const
 {
-    const REDasm::Graphing::FunctionBasicBlock* fromfbb = static_cast<const REDasm::Graphing::FunctionGraph*>(this->graph())->data(e.source);
-    const REDasm::Graphing::FunctionBasicBlock* tofbb = static_cast<const REDasm::Graphing::FunctionGraph*>(this->graph())->data(e.target);
+    const REDasm::FunctionBasicBlock* fromfbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.source));
+    const REDasm::FunctionBasicBlock* tofbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.target));
     REDasm::ListingDocument& document = m_disassembler->document();
-    const REDasm::ListingItem* fromitem = document->itemAt(fromfbb->endidx);
-    REDasm::InstructionPtr instruction = document->instruction(fromitem->address);
-    std::string label;
+    const REDasm::ListingItem* fromitem = fromfbb->endItem();
+    REDasm::CachedInstruction instruction = document->instruction(fromitem->address_new);
+    REDasm::String label;
 
     if(instruction && instruction->is(REDasm::InstructionType::Conditional))
     {
-        const REDasm::ListingItem* toitem = document->itemAt(tofbb->startidx);
+        const REDasm::ListingItem* toitem = tofbb->startItem();
 
-        if(m_disassembler->getTarget(instruction->address) == toitem->address)
+        if(m_disassembler->getTarget(instruction->address) == toitem->address_new)
             label = "TRUE";
         else
             label = "FALSE";
     }
 
-    if(tofbb->startidx <= fromfbb->startidx)
+    if(!(tofbb->startItem() > fromfbb->startItem()))
         label += !label.empty() ? " (LOOP)" : "LOOP";
 
     return label;
@@ -233,24 +234,22 @@ std::string DisassemblerGraphView::getEdgeLabel(const REDasm::Graphing::Edge &e)
 GraphViewItem *DisassemblerGraphView::itemFromCurrentLine() const
 {
     const REDasm::ListingCursor* cursor = m_disassembler->document()->cursor();
-    const REDasm::ListingItem* item = m_disassembler->document()->currentItem();
+    REDasm::ListingItem* item = m_disassembler->document()->currentItem();
 
     if(!item)
         return nullptr;
 
-    size_t line = cursor->currentLine();
+    if(item->is(REDasm::ListingItemType::FunctionItem)) // Adjust to instruction
+        item = m_disassembler->document()->instructionItem(item->address_new);
 
-    if(item->is(REDasm::ListingItem::FunctionItem)) // Adjust to instruction
-        line = m_disassembler->document()->instructionIndex(item->address);
-
-    for(const auto& item : m_items)
+    for(const auto& gvi : m_items)
     {
-        DisassemblerBlockItem* dbi = static_cast<DisassemblerBlockItem*>(item);
+        DisassemblerBlockItem* dbi = static_cast<DisassemblerBlockItem*>(gvi);
 
-        if(!dbi->containsIndex(line))
+        if(!dbi->containsItem(item))
             continue;
 
-        return item;
+        return gvi;
     }
 
     return nullptr;

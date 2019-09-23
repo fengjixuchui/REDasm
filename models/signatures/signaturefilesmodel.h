@@ -2,23 +2,23 @@
 #define SIGNATUREFILESMODEL_H
 
 #include <QAbstractListModel>
-#include <redasm/disassembler/disassemblerapi.h>
+#include <redasm/disassembler/disassembler.h>
 #include <redasm/database/signaturedb.h>
-#include <redasm/plugins/loader.h>
-#include <json.hpp>
+#include <redasm/plugins/loader/loader.h>
+#include <redasm/libs/nlohmann/json.hpp>
 
 class SignatureFilesModel : public QAbstractListModel
 {
     Q_OBJECT
 
     public:
-        explicit SignatureFilesModel(REDasm::DisassemblerAPI* disassembler, QObject *parent = nullptr);
+        explicit SignatureFilesModel(REDasm::Disassembler* disassembler, QObject *parent = nullptr);
         const REDasm::SignatureDB* load(const QModelIndex& index);
-        const std::string& signatureId(const QModelIndex& index) const;
-        const std::string& signaturePath(const QModelIndex& index) const;
+        const REDasm::String& signatureId(const QModelIndex& index) const;
+        const REDasm::String& signaturePath(const QModelIndex& index) const;
         bool isLoaded(const QModelIndex& index) const;
-        bool contains(const std::string& sigid) const;
-        void add(const std::string& sigid, const std::string& sigpath);
+        bool contains(const REDasm::String& sigid) const;
+        void add(const REDasm::String& sigid, const REDasm::String& sigpath);
         void mark(const QModelIndex& index);
 
     public:
@@ -28,9 +28,9 @@ class SignatureFilesModel : public QAbstractListModel
         int columnCount(const QModelIndex& = QModelIndex()) const override;
 
     private:
-        QList< QPair<std::string, std::string> > m_signaturefiles;
+        QList< QPair<REDasm::String, REDasm::String> > m_signaturefiles;
         QHash<int, REDasm::SignatureDB> m_loadedsignatures;
-        REDasm::DisassemblerAPI* m_disassembler;
+        REDasm::Disassembler* m_disassembler;
 };
 
 #endif // SIGNATUREFILESMODEL_H

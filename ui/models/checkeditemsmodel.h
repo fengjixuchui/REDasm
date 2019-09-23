@@ -2,10 +2,12 @@
 #define CHECKEDITEMSMODEL_H
 
 #include <QAbstractListModel>
-#include <redasm/redasm_ui.h>
+#include <redasm/ui.h>
 
 class CheckedItemsModel : public QAbstractListModel
 {
+    Q_OBJECT
+
     public:
         CheckedItemsModel(REDasm::UI::CheckList& items, QObject* parent = nullptr);
         void uncheckAll();

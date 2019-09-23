@@ -1,15 +1,19 @@
 #include "referencesmodel.h"
 #include <redasm/disassembler/types/referencetable.h>
 #include <redasm/disassembler/listing/listingdocument.h>
-#include <redasm/plugins/loader.h>
+#include <redasm/plugins/assembler/assembler.h>
+#include <redasm/plugins/loader/loader.h>
+#include <redasm/support/utils.h>
+#include <redasm/redasm.h>
 #include "../themeprovider.h"
+#include "../convert.h"
 
 ReferencesModel::ReferencesModel(QObject *parent): DisassemblerModel(parent) { }
 
 void ReferencesModel::setDisassembler(const REDasm::DisassemblerPtr &disassembler)
 {
     DisassemblerModel::setDisassembler(disassembler);
-    m_printer = REDasm::PrinterPtr(disassembler->assembler()->createPrinter(disassembler.get()));
+    m_printer = r_asm->createPrinter();
 }
 
 void ReferencesModel::clear()
@@ -34,7 +38,7 @@ QModelIndex ReferencesModel::index(int row, int column, const QModelIndex &) con
     if(row >= static_cast<int>(m_references.size()))
         return QModelIndex();
 
-    return this->createIndex(row, column, m_references[row]);
+    return this->createIndex(row, column, m_references[row].toU64());
 }
 
 QVariant ReferencesModel::data(const QModelIndex &index, int role) const
@@ -43,26 +47,26 @@ QVariant ReferencesModel::data(const QModelIndex &index, int role) const
         return QVariant();
 
     auto& document = m_disassembler->document();
-    auto it = document->instructionItem(m_references[index.row()]);
+    const REDasm::ListingItem* item = document->instructionItem(m_references[index.row()].toU64());
 
-    if(it == document->end())
-        it = document->symbolItem(m_references[index.row()]);
+    if(!item)
+        item = document->symbolItem(m_references[index.row()].toU64());
 
-    if(it == document->end())
+    if(!item)
         return QVariant();
 
     if(role == Qt::DisplayRole)
     {
         if(index.column() == 0)
-            return S_TO_QS(REDasm::hex((*it)->address, m_disassembler->assembler()->bits()));
+            return S_TO_QS(REDasm::String::hex(item->address_new, m_disassembler->assembler()->bits()));
         else if(index.column() == 1)
-            return this->direction((*it)->address);
+            return this->direction(item->address_new);
         else if(index.column() == 2)
         {
-            if((*it)->is(REDasm::ListingItem::InstructionItem))
-                return QString::fromStdString(REDasm::simplified(m_printer->out(document->instruction((*it)->address))));
-            else if((*it)->is(REDasm::ListingItem::SymbolItem))
-                return QString::fromStdString(document->symbol((*it)->address)->name);
+            if(item->is(REDasm::ListingItemType::InstructionItem))
+                return Convert::to_qstring(m_printer->out(document->instruction(item->address_new)).simplified());
+            else if(item->is(REDasm::ListingItemType::SymbolItem))
+                return Convert::to_qstring(document->symbol(item->address_new)->name);
         }
     }
     else if(role == Qt::ForegroundRole)
@@ -72,9 +76,9 @@ QVariant ReferencesModel::data(const QModelIndex &index, int role) const
 
         if(index.column() == 2)
         {
-            if((*it)->is(REDasm::ListingItem::InstructionItem))
+            if(item->is(REDasm::ListingItemType::InstructionItem))
             {
-                REDasm::InstructionPtr instruction = document->instruction((*it)->address);
+                REDasm::CachedInstruction instruction = document->instruction(item->address_new);
 
                 if(!instruction->is(REDasm::InstructionType::Conditional))
                     return THEME_VALUE("instruction_jmp_c");
@@ -83,9 +87,9 @@ QVariant ReferencesModel::data(const QModelIndex &index, int role) const
                 else if(instruction->is(REDasm::InstructionType::Call))
                     return THEME_VALUE("instruction_call");
             }
-            else if((*it)->is(REDasm::ListingItem::SymbolItem))
+            else if(item->is(REDasm::ListingItemType::SymbolItem))
             {
-                const REDasm::Symbol* symbol = document->symbol((*it)->address);
+                const REDasm::Symbol* symbol = document->symbol(item->address_new);
 
                 if(symbol->is(REDasm::SymbolType::Data))
                     return THEME_VALUE("data_fg");
@@ -123,10 +127,10 @@ QString ReferencesModel::direction(address_t address) const
 
     if(item)
     {
-        if(address > item->address)
+        if(address > item->address_new)
             return "Down";
 
-        if(address < item->address)
+        if(address < item->address_new)
             return "Up";
     }
 

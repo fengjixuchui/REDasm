@@ -9,8 +9,9 @@ class REDasmUI: public REDasm::AbstractUI
     public:
         REDasmUI(QMainWindow* mainwindow);
         virtual ~REDasmUI() = default;
-        void checkList(const std::string& title, const std::string& text, std::deque<REDasm::UI::CheckListItem>& items) override;
-        bool askYN(const std::string& title, const std::string& text) override;
+        int select(const REDasm::String& title, const REDasm::String &text, const REDasm::List& items) override;
+        void checkList(const REDasm::String& title, const REDasm::String& text, std::deque<REDasm::UI::CheckListItem>& items) override;
+        bool askYN(const REDasm::String& title, const REDasm::String& text) override;
 
     private:
         QMainWindow* m_mainwindow;

@@ -4,17 +4,21 @@ project(REDasm)
 
 set(QT_VERSION_REQ "5.9")
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 option(DEBUG_STL_ITERATORS      "Enable iterator debugging in Debug mode (GCC only)" OFF)
-option(ENABLE_ADDRESS_SANITIZER "Enable Address Sanitizer" OFF)
-option(ENABLE_THREAD_SANITIZER  "Enable Thread Sanitizer" OFF)
+option(ENABLE_ADDRESS_SANITIZER "Enable Address Sanitizer"                           OFF)
+option(ENABLE_THREAD_SANITIZER  "Enable Thread Sanitizer"                            OFF)
+option(PORTABLE_MODE            "Enable Portable Mode"                               OFF)
 
 string(TIMESTAMP REDASM_BUILD_TIMESTAMP "%Y%m%d")
 set(REDASM_GIT_VERSION "unknown")
+
+if(PORTABLE_MODE)
+    add_definitions(-DREDASM_PORTABLE_MODE=1)
+endif()
 
 if(UNIX)
     set(CMAKE_SKIP_BUILD_RPATH FALSE)
@@ -41,9 +45,15 @@ endif()
 set(REDASM_BUILD_VERSION "${REDASM_BUILD_TIMESTAMP}.${REDASM_GIT_VERSION}")
 add_definitions(-DREDASM_VERSION="${REDASM_BUILD_VERSION}")
 
-
 add_subdirectory(LibREDasm)
 add_subdirectory(QHexView)
+
+# FindREDasm.config
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/LibREDasm/redasm")
+
+add_subdirectory(submodules/plugins)
+add_subdirectory(submodules/assemblers)
+add_subdirectory(submodules/loaders)
 
 if((CMAKE_BUILD_TYPE MATCHES Debug) OR (CMAKE_BUILD_TYPE MATCHES RelWithDebInfo))
     add_subdirectory(unittest)
@@ -82,6 +92,7 @@ SET(HEADERS
     ${MODELS_HEADERS}
     ${RENDERER_HEADERS}
     ${UI_HEADERS}
+    convert.h
     mainwindow.h
     themeprovider.h
     redasmsettings.h
@@ -122,7 +133,7 @@ add_executable(${PROJECT_NAME} ${GUI_TYPE}
                ${RESOURCES}
                ${CMAKE_SOURCE_DIR}/res/windows/resources.rc)
 
-target_include_directories(${PROJECT_NAME} PUBLIC LibREDasm QHexEdit)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} LibREDasm QHexEdit)
 add_dependencies(${PROJECT_NAME} LibREDasm)
 
 if(WIN32)
@@ -150,4 +161,3 @@ endif()
 # Post build commands
 set(LIBREDASM_BIN ${CMAKE_BINARY_DIR}/LibREDasm/LibREDasm${CMAKE_SHARED_LIBRARY_SUFFIX})
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${LIBREDASM_BIN} ${CMAKE_BINARY_DIR})
-

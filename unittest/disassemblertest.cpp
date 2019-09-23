@@ -1,5 +1,9 @@
 #include "disassemblertest.h"
+#include "../convert.h"
 #include <redasm/disassembler/disassembler.h>
+#include <redasm/plugins/assembler/assembler.h>
+#include <redasm/support/utils.h>
+#include <redasm/context.h>
 #include <QStandardPaths>
 #include <QApplication>
 #include <iostream>
@@ -9,13 +13,13 @@
 #include <QDir>
 
 #define TEST_PREFIX                      "/home/davide/Programmazione/Campioni/" // NOTE: Yes, hardcoded for now :(
-#define TEST_PATH(s)                     TEST_PREFIX + std::string(s)
+#define TEST_PATH(s)                     TEST_PREFIX + String(s)
 
 #define REPEAT_COUNT                     20
-#define REPEATED(s)                      std::string(REPEAT_COUNT, s)
+#define REPEATED(s)                      String::repeated(s, REPEAT_COUNT).c_str()
 
-#define RED_STRING(s)                    ("\x1b[31m" + std::string(s) + "\x1b[0m")
-#define GREEN_STRING(s)                  ("\x1b[32m" + std::string(s) + "\x1b[0m")
+#define RED_STRING(s)                    ("\x1b[31m" + String(s) + "\x1b[0m").c_str()
+#define GREEN_STRING(s)                  ("\x1b[32m" + String(s) + "\x1b[0m").c_str()
 #define TEST_OK                          GREEN_STRING("OK")
 #define TEST_FAIL                        RED_STRING("FAIL")
 
@@ -54,18 +58,21 @@ DisassemblerTest::DisassemblerTest(): m_buffer(nullptr)
     ADD_TEST_PATH_NULL("PE Test/CorruptedIT.exe", nullptr);
 
     ContextSettings ctxsettings;
-    ctxsettings.tempPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation).toStdString();
-    ctxsettings.searchPath = QDir::currentPath().toStdString();
-    ctxsettings.logCallback =[](const std::string&) { };
+    ctxsettings.tempPath = qUtf8Printable(QStandardPaths::writableLocation(QStandardPaths::TempLocation));
+    ctxsettings.runtimePath = qUtf8Printable(QDir::currentPath());
+    ctxsettings.logCallback =[](const String&) { };
     ctxsettings.ignoreproblems = true;
-    REDasm::init(ctxsettings);
+    r_ctx->init(ctxsettings);
 }
+
+DisassemblerTest::~DisassemblerTest() { }
 
 void DisassemblerTest::runTests()
 {
     for(const TestItem& test : m_tests)
     {
-        QString testpath = QString::fromStdString(test.first);
+        r_pm->unloadAll();
+        QString testpath = Convert::to_qstring(test.first);
         QFileInfo fi(testpath);
 
         if(!fi.exists())
@@ -75,7 +82,7 @@ void DisassemblerTest::runTests()
         }
 
         TEST_TITLE(qUtf8Printable(fi.fileName()));
-        m_buffer = MemoryBuffer::fromFile(testpath.toStdString());
+        m_buffer = MemoryBuffer::fromFile(qUtf8Printable(testpath));
 
         if(m_buffer->empty())
         {
@@ -104,25 +111,29 @@ string DisassemblerTest::replaceAll(std::string str, const std::string &from, co
     return str;
 }
 
-void DisassemblerTest::runCurrentTest(const std::string& filepath, const TestCallback &cb)
+void DisassemblerTest::runCurrentTest(const String& filepath, const TestCallback &cb)
 {
     LoadRequest request(filepath, m_buffer);
-    LoaderList loaders = REDasm::getLoaders(request, true);
+    REDasm::PluginList loaders = r_pm->getLoaders(request); //, true);
     TEST("Loader", !loaders.empty());
 
     if(loaders.empty())
         return;
 
-    const LoaderPlugin_Entry* loaderentry = loaders.front();
-    std::unique_ptr<LoaderPlugin> loader(loaderentry->init(request));
+    const PluginInstance *assemblerpi = nullptr, *loaderpi = loaders.first();
+    REDasm::Loader* loader = plugin_cast<REDasm::Loader>(loaderpi);
+    loader->init(request);
 
-    const AssemblerPlugin_Entry* assemblerentry = REDasm::getAssembler(loader->assembler());
-    TEST("Assembler", assemblerentry);
+    assemblerpi = r_pm->findAssembler(loader->assembler().id);
+    TEST("Assembler", assemblerpi);
 
-    if(!assemblerentry)
+    if(!assemblerpi)
         return;
 
-    m_disassembler = std::make_unique<Disassembler>(assemblerentry->init(), loader.release()); // Takes ownership
+    REDasm::Assembler* assembler = plugin_cast<REDasm::Assembler>(assemblerpi);
+    assembler->init(loader->assembler());
+
+    m_disassembler = std::make_unique<Disassembler>(assembler, loader);
     m_document = m_disassembler->document();
 
     cout << "->> Disassembler...";
@@ -133,22 +144,24 @@ void DisassemblerTest::runCurrentTest(const std::string& filepath, const TestCal
         cb();
 }
 
-void DisassemblerTest::testTrampolines(const std::map<address_t, string> &trampolines)
+void DisassemblerTest::testTrampolines(const std::map<address_t, String> &trampolines)
 {
     for(auto& trampoline : trampolines)
     {
         const Symbol* symbol = m_document->symbol(trampoline.first);
-        TEST_SYMBOL_NAME("Trampoline " + trampoline.second + " @  " + REDasm::hex(trampoline.first), symbol, symbol->isFunction(), trampoline.second);
+        TEST_SYMBOL_NAME(("Trampoline " + trampoline.second + " @  " + String::hex(trampoline.first)).c_str(), symbol, symbol->isFunction(), trampoline.second);
     }
 }
 
-void DisassemblerTest::testVBEvents(const std::map<address_t, string> &vbevents)
+void DisassemblerTest::testVBEvents(const std::map<address_t, String> &vbevents)
 {
     for(auto& vbevent : vbevents)
     {
-        std::string procname = DisassemblerTest::replaceAll(vbevent.second, "::", "_");
+        String procname = vbevent.second;
+        procname.replace("::", "_");
+
         const Symbol* symbol = m_document->symbol(vbevent.first);
-        TEST_SYMBOL_NAME("Event " + vbevent.second + " @ " + REDasm::hex(vbevent.first), symbol, symbol->isFunction(), procname);
+        TEST_SYMBOL_NAME(("Event " + vbevent.second + " @ " + String::hex(vbevent.first)).c_str(), symbol, symbol->isFunction(), procname);
     }
 }
 
@@ -187,7 +200,7 @@ void DisassemblerTest::testOllyDump()
     const Symbol* symbol = m_document->symbol(0x00403BDC);
     TEST_SYMBOL("Checking Function @ 00403bdc", symbol, symbol->isFunction());
 
-    InstructionPtr instruction = m_document->instruction(0x00403BEA);
+    CachedInstruction instruction = m_document->instruction(0x00403BEA);
     TEST("Checking CALL @ 0x00403BEA", instruction);
 
     if(!instruction)
@@ -216,7 +229,7 @@ void DisassemblerTest::testSCrack()
     symbol = m_document->symbol(0x00402B2C);
     TEST_SYMBOL("Wide String @ 0x00402b2c", symbol, symbol->is(SymbolType::WideString));
 
-    std::map<address_t, std::string> vbevents;
+    std::map<address_t, String> vbevents;
     vbevents[0x00403BB0] = "main::about::Click";
     vbevents[0x00403D20] = "main::about::GotFocus";
     vbevents[0x00403DE0] = "main::about::LostFocus";
@@ -239,7 +252,7 @@ void DisassemblerTest::testVB5CrackMe()
     const Symbol* symbol = m_document->symbol(0x0040110E);
     TEST_SYMBOL_NAME("Import VB5 ThunRTMain", symbol, symbol->is(SymbolType::Function), "_msvbvm50.dll_ThunRTMain");
 
-    std::map<address_t, std::string> trampolines;
+    std::map<address_t, String> trampolines;
     trampolines[0x004010C0] = "_msvbvm50.dll___vbaExitProc";
     trampolines[0x004010C6] = "_msvbvm50.dll___vbaFreeVarList";
     trampolines[0x004010CC] = "_msvbvm50.dll___vbaVarDup";
@@ -265,7 +278,7 @@ void DisassemblerTest::testVB5CrackMe()
     symbol = m_document->symbol(0x00401F44);
     TEST_SYMBOL("Wide String @ 0x00401F44", symbol, symbol->is(SymbolType::WideString));
 
-    std::map<address_t, std::string> vbevents;
+    std::map<address_t, String> vbevents;
     vbevents[0x004020C4] = "Form1::Command1::Click";
 
     this->testVBEvents(vbevents);
@@ -273,18 +286,18 @@ void DisassemblerTest::testVB5CrackMe()
 
 void DisassemblerTest::testIoliARM()
 {
-    InstructionPtr instruction = m_document->instruction(0x00011064);
+    CachedInstruction instruction = m_document->instruction(0x00011064);
     TEST("Checking LDR @ 0x00011064", instruction);
 
     if(!instruction)
         return;
 
-    TEST("Checking LDR's operands count", (instruction->mnemonic == "ldr") && (instruction->operands.size() >= 2));
+    TEST("Checking LDR's operands count", (instruction->mnemonic == "ldr") && (instruction->operandsCount() >= 2));
 
-    Operand op = instruction->operands[1];
-    TEST("Checking LDR's operand 2", op.is(OperandType::Memory));
+    Operand* op = instruction->op(1);
+    TEST("Checking LDR's operand 2", op->is(OperandType::Memory));
 
-    const Symbol* symbol = m_document->symbol(op.u_value);
+    const Symbol* symbol = m_document->symbol(op->u_value);
     TEST_SYMBOL("Checking LDR's operand 2 symbol", symbol, symbol->is(SymbolType::Data) && symbol->is(SymbolType::Pointer));
 
     symbol = m_disassembler->dereferenceSymbol(symbol);
@@ -296,20 +309,20 @@ void DisassemblerTest::testIoliARM()
     if(!instruction)
         return;
 
-    TEST("Checking LDR's operands count", (instruction->mnemonic == "ldr") && (instruction->operands.size() >= 2));
+    TEST("Checking LDR's operands count", (instruction->mnemonic == "ldr") && (instruction->operandsCount() >= 2));
 
-    op = instruction->operands[1];
-    TEST("Checking LDR's operand 2", op.is(OperandType::Memory));
+    op = instruction->op(1);
+    TEST("Checking LDR's operand 2", op->is(OperandType::Memory));
 
     u64 value = 0;
-    symbol = m_document->symbol(op.u_value);
+    symbol = m_document->symbol(op->u_value);
     TEST_SYMBOL("Checking LDR's operand 2 symbol", symbol, symbol->is(SymbolType::Data) && symbol->is(SymbolType::Pointer));
     TEST("Checking dereferenced value", m_disassembler->dereference(symbol->address, &value) && (value == 0x149a));
 }
 
 void DisassemblerTest::testTn11()
 {
-    InstructionPtr instruction = m_document->instruction(0x004010C0);
+    CachedInstruction instruction = m_document->instruction(0x004010C0);
     TEST("Checking DlgProc @ 0x004010C0", instruction);
 
     instruction = m_document->instruction(0x00401197);
@@ -324,11 +337,13 @@ void DisassemblerTest::testTn11()
         return;
 
     size_t i = 0;
+    SortedSet targets = m_disassembler->getTargets(instruction->address);
 
-    for(address_t target : m_disassembler->getTargets(instruction->address))
+    for(size_t i = 0; i < targets.size(); i++)
     {
+        address_t target = targets[i].toU64();
         const Symbol* symbol = m_document->symbol(target);
-        TEST("Checking CASE #" + std::to_string(i) + " @ " + REDasm::hex(target), symbol && symbol->is(SymbolType::Code) && m_document->instruction(target));
+        TEST(("Checking CASE #" + String::number(i) + " @ " + String::hex(target)).c_str(), symbol && symbol->is(SymbolType::Code) && m_document->instruction(target));
         i++;
     }
 }
@@ -365,29 +380,29 @@ void DisassemblerTest::testPwrCtlBE()
 
 void DisassemblerTest::testHelloWorldMFC()
 {
-    std::list<std::string> rttiobjects = { "type_info::ptr_rtti_object",
-                                           "CMyApp::ptr_rtti_object",
-                                           "CMainWindow::ptr_rtti_object" };
+    std::list<String> rttiobjects = { "type_info::ptr_rtti_object",
+                                      "CMyApp::ptr_rtti_object",
+                                      "CMainWindow::ptr_rtti_object" };
 
-    for(const std::string& rttiobject : rttiobjects)
+    for(const String& rttiobject : rttiobjects)
     {
         const Symbol* symbol = m_document->symbol(rttiobject);
-        TEST_SYMBOL("Checking " + rttiobject, symbol, symbol->is(SymbolType::Pointer));
+        TEST_SYMBOL(("Checking " + rttiobject).c_str(), symbol, symbol->is(SymbolType::Pointer));
     }
 }
 
 void DisassemblerTest::testTestRTTI()
 {
-    std::list<std::string> rttiobjects = { "type_info::ptr_rtti_object",
-                                           "std::exception::ptr_rtti_object",
-                                           "std::bad_alloc::ptr_rtti_object",
-                                           "std::bad_array_new_length::ptr_rtti_object",
-                                           "BaseClass::ptr_rtti_object",
-                                           "DerivedClass::ptr_rtti_object" };
+    std::list<String> rttiobjects = { "type_info::ptr_rtti_object",
+                                      "std::exception::ptr_rtti_object",
+                                      "std::bad_alloc::ptr_rtti_object",
+                                      "std::bad_array_new_length::ptr_rtti_object",
+                                      "BaseClass::ptr_rtti_object",
+                                      "DerivedClass::ptr_rtti_object" };
 
-    for(const std::string& rttiobject : rttiobjects)
+    for(const String& rttiobject : rttiobjects)
     {
         const Symbol* symbol = m_document->symbol(rttiobject);
-        TEST_SYMBOL("Checking " + rttiobject, symbol, symbol->is(SymbolType::Pointer));
+        TEST_SYMBOL(("Checking " + rttiobject).c_str(), symbol, symbol->is(SymbolType::Pointer));
     }
 }

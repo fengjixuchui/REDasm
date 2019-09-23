@@ -1,8 +1,7 @@
-#ifndef DISASSEMBLERLISTINGVIEW_H
-#define DISASSEMBLERLISTINGVIEW_H
+#pragma once
 
 #include <QSplitter>
-#include <redasm/disassembler/disassemblerapi.h>
+#include <redasm/disassembler/disassembler.h>
 #include "disassemblercolumnview.h"
 #include "disassemblertextview.h"
 
@@ -24,5 +23,3 @@ class DisassemblerListingView : public QSplitter
         DisassemblerColumnView* m_disassemblercolumnview;
         DisassemblerTextView* m_disassemblertextview;
 };
-
-#endif // DISASSEMBLERLISTINGVIEW_H

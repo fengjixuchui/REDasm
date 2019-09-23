@@ -16,7 +16,7 @@ class DisassemblerGraphView : public GraphView
         virtual ~DisassemblerGraphView();
         void setDisassembler(const REDasm::DisassemblerPtr &disassembler) override;
         bool isCursorInGraph() const;
-        std::string currentWord();
+        REDasm::String currentWord();
 
     public slots:
         void goTo(address_t address);
@@ -24,8 +24,8 @@ class DisassemblerGraphView : public GraphView
         bool renderGraph();
 
     private:
-        QColor getEdgeColor(const REDasm::Graphing::Edge &e) const;
-        std::string getEdgeLabel(const REDasm::Graphing::Edge &e) const;
+        QColor getEdgeColor(const REDasm::Edge &e) const;
+        REDasm::String getEdgeLabel(const REDasm::Edge &e) const;
         GraphViewItem* itemFromCurrentLine() const;
 
     protected:

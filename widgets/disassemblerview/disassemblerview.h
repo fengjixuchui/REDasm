@@ -26,8 +26,8 @@ class DisassemblerView : public QWidget
     public:
         explicit DisassemblerView(QLineEdit* lefilter, QWidget *parent = nullptr);
         virtual ~DisassemblerView();
-        REDasm::DisassemblerAPI *disassembler();
-        void bindDisassembler(REDasm::DisassemblerAPI *disassembler, bool fromdatabase);
+        REDasm::Disassembler *disassembler();
+        void bindDisassembler(REDasm::Disassembler *disassembler, bool fromdatabase);
         void hideActions();
         void toggleFilter();
         void showFilter();
@@ -55,9 +55,9 @@ class DisassemblerView : public QWidget
         void goBack();
 
     private:
-        const REDasm::ListingItem* itemFromIndex(const QModelIndex& index) const;
+        REDasm::ListingItem itemFromIndex(const QModelIndex& index) const;
         ListingFilterModel* getSelectedFilterModel();
-        std::string currentWord() const;
+        REDasm::String currentWord() const;
         void showListingOrGraph();
         void createActions();
         void filterSymbols();

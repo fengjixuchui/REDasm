@@ -19,7 +19,7 @@ void DisassemblerViewDocks::setDisassembler(const REDasm::DisassemblerPtr& disas
 {
     m_disassembler = disassembler;
 
-    EVENT_CONNECT(m_disassembler, busyChanged, this, [&]() {
+    m_disassembler->busyChanged.connect(this, [&](REDasm::EventArgs*) {
         if(m_disassembler->busy())
             return;
 
@@ -58,11 +58,12 @@ void DisassemblerViewDocks::initializeCallGraph(address_t address)
 
 void DisassemblerViewDocks::updateCallGraph()
 {
-    if(m_disassembler->busy() || m_calltreeview->visibleRegion().isEmpty())
+    REDasm::ListingDocument& document = m_disassembler->document();
+
+    if(m_disassembler->busy() || m_calltreeview->visibleRegion().isEmpty() || !document->currentItem())
         return;
 
-    REDasm::ListingDocument& document = m_disassembler->document();
-    const REDasm::ListingItem* item = document->functionStart(document->currentItem()->address);
+    const REDasm::ListingItem* item = document->functionStart(document->currentItem()->address_new);
 
     if(!item)
     {
@@ -70,7 +71,7 @@ void DisassemblerViewDocks::updateCallGraph()
         return;
     }
 
-    m_calltreemodel->initializeGraph(item->address);
+    m_calltreemodel->initializeGraph(item->address_new);
     m_calltreeview->expandToDepth(0);
 }
 
@@ -106,7 +107,7 @@ void DisassemblerViewDocks::createCallTreeModel()
 
 void DisassemblerViewDocks::createFunctionsModel()
 {
-    m_functionsmodel = ListingFilterModel::createFilter<ListingItemModel>(REDasm::ListingItem::FunctionItem, this);
+    m_functionsmodel = ListingFilterModel::createFilter<ListingItemModel>(REDasm::ListingItemType::FunctionItem, this);
     m_functionsview = m_dockfunctions->widget()->findChild<QTableView*>("tvFunctions");
     m_functionsview->setModel(m_functionsmodel);
 

@@ -12,11 +12,11 @@ class DisassemblerBlockItem : public GraphViewItem
     Q_OBJECT
 
     public:
-        explicit DisassemblerBlockItem(const REDasm::Graphing::FunctionBasicBlock* fbb, const REDasm::DisassemblerPtr& disassembler, const REDasm::Graphing::Node& node, QWidget *parent = nullptr);
+        explicit DisassemblerBlockItem(const REDasm::FunctionBasicBlock* fbb, const REDasm::DisassemblerPtr& disassembler, REDasm::Node node, QWidget *parent = nullptr);
         virtual ~DisassemblerBlockItem();
-        std::string currentWord();
+        REDasm::String currentWord();
         ListingDocumentRenderer* renderer() const;
-        bool containsIndex(s64 index) const;
+        bool containsItem(REDasm::ListingItem *item) const;
 
     public:
         int currentLine() const override;
@@ -37,7 +37,7 @@ class DisassemblerBlockItem : public GraphViewItem
         void followRequested(const QPointF& localpos);
 
     private:
-        const REDasm::Graphing::FunctionBasicBlock* m_basicblock;
+        const REDasm::FunctionBasicBlock* m_basicblock;
         std::unique_ptr<ListingDocumentRenderer> m_renderer;
         REDasm::DisassemblerPtr m_disassembler;
         QTextDocument m_document;

@@ -1,5 +1,4 @@
-#ifndef DISASSEMBLERTEXTVIEW_H
-#define DISASSEMBLERTEXTVIEW_H
+#pragma once
 
 #include <QAbstractScrollArea>
 #include <QFontMetrics>
@@ -16,7 +15,7 @@ class DisassemblerTextView : public QAbstractScrollArea
         explicit DisassemblerTextView(QWidget *parent = nullptr);
         virtual ~DisassemblerTextView();
         DisassemblerActions* disassemblerActions() const;
-        std::string currentWord() const;
+        REDasm::String currentWord() const;
         bool canGoBack() const;
         bool canGoForward() const;
         size_t visibleLines() const;
@@ -46,10 +45,10 @@ class DisassemblerTextView : public QAbstractScrollArea
         bool event(QEvent* e) override;
 
     private:
-        void paintLines(QPainter* painter, u64 first, u64 last);
-        void onDocumentChanged(const REDasm::ListingDocumentChanged* ldc);
-        REDasm::ListingDocument& currentDocument();
-        const REDasm::ListingDocument& currentDocument() const;
+        void paintLines(QPainter* painter, size_t first, size_t last);
+        void onDocumentChanged(REDasm::EventArgs *e);
+        REDasm::ListingDocumentNew& currentDocumentNew();
+        const REDasm::ListingDocumentNew& currentDocumentNew() const;
         const REDasm::Symbol *symbolUnderCursor();
         bool isLineVisible(size_t line) const;
         bool isColumnVisible(size_t column, size_t *xpos);
@@ -73,5 +72,3 @@ class DisassemblerTextView : public QAbstractScrollArea
         DisassemblerActions* m_actions;
         int m_refreshrate, m_blinktimerid, m_refreshtimerid;
 };
-
-#endif // DISASSEMBLERTEXTVIEW_H

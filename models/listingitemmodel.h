@@ -1,18 +1,19 @@
-#ifndef LISTINGITEMMODEL_H
-#define LISTINGITEMMODEL_H
+#pragma once
 
 #include <QList>
 #include "disassemblermodel.h"
 #include <redasm/disassembler/listing/listingdocument.h>
+#include <redasm/disassembler/listing/listingdocumentnew.h>
+#include <redasm/disassembler/listing/backend/listingitems.h>
 
 class ListingItemModel : public DisassemblerModel
 {
     Q_OBJECT
 
     public:
-        explicit ListingItemModel(size_t itemtype, QObject *parent = nullptr);
+        explicit ListingItemModel(REDasm::ListingItemType itemtype, QObject *parent = nullptr);
         void setDisassembler(const REDasm::DisassemblerPtr &disassembler) override;
-        const REDasm::ListingItem* item(const QModelIndex& index) const;
+        REDasm::ListingItem item(const QModelIndex& index) const;
         address_location address(const QModelIndex& index) const;
 
     public:
@@ -23,16 +24,14 @@ class ListingItemModel : public DisassemblerModel
         QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     protected:
-        virtual bool isItemAllowed(const REDasm::ListingItem *item) const;
-
-    private slots:
-        void onListingChanged(const REDasm::ListingDocumentChanged *ldc);
+        virtual bool isItemAllowed(const REDasm::ListingItem& item) const;
 
     private:
-        REDasm::sorted_container<address_t> m_items;
-        size_t m_itemtype;
+        void onListingChanged(REDasm::EventArgs* e);
+
+    private:
+        REDasm::SortedList m_items;
+        REDasm::ListingItemType m_itemtype;
 
     friend class ListingFilterModel;
 };
-
-#endif // LISTINGITEMMODEL_H

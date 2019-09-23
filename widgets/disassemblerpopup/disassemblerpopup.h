@@ -3,7 +3,7 @@
 
 #include <QWidget>
 #include <redasm/disassembler/listing/listingdocument.h>
-#include <redasm/disassembler/disassemblerapi.h>
+#include <redasm/disassembler/disassembler.h>
 #include "../../renderer/listingdocumentrenderer.h"
 #include "disassemblerpopupwidget.h"
 
@@ -12,7 +12,7 @@ class DisassemblerPopup : public QWidget
     public:
         explicit DisassemblerPopup(const REDasm::DisassemblerPtr& disassembler, QWidget* parent = nullptr);
         ~DisassemblerPopup();
-        void popup(const std::string& word, int line);
+        void popup(const REDasm::String &word, int line);
 
     protected:
         void mouseMoveEvent(QMouseEvent *e) override;

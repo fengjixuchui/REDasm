@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QFont>
 #include <redasm/disassembler/listing/listingdocument.h>
+#include <redasm/disassembler/disassembler.h>
 #include <redasm/disassembler/listing/listingrenderer.h>
 
 #define CURSOR_BLINK_INTERVAL 500  // 500ms
@@ -13,13 +14,13 @@
 class ListingRendererCommon: public REDasm::ListingRenderer
 {
     public:
-        ListingRendererCommon(REDasm::DisassemblerAPI* disassembler);
+        ListingRendererCommon();
         virtual ~ListingRendererCommon() = default;
         void moveTo(const QPointF& pos);
         void select(const QPointF& pos);
         REDasm::ListingCursor::Position hitTest(const QPointF& pos);
         REDasm::ListingRenderer::Range wordHitTest(const QPointF& pos);
-        std::string getWordFromPos(const QPointF& pos, Range *wordpos = nullptr);
+        REDasm::String getWordFromPos(const QPointF& pos, Range *wordpos = nullptr);
         void selectWordAt(const QPointF &pos);
         void setFirstVisibleLine(size_t line);
         const QFontMetricsF fontMetrics() const;

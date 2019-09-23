@@ -27,15 +27,19 @@ void DisassemblerColumnView::renderArrows(size_t start, size_t count)
 
         REDasm::ListingItem* item = document->itemAt(start);
 
-        if(item->is(REDasm::ListingItem::InstructionItem))
+        if(item->is(REDasm::ListingItemType::InstructionItem))
         {
-            REDasm::InstructionPtr instruction = document->instruction(item->address);
+            REDasm::CachedInstruction instruction = document->instruction(item->address_new);
 
             if(!instruction->is(REDasm::InstructionType::Jump))
                 continue;
 
-            for(address_t target : m_disassembler->getTargets(instruction->address))
+            REDasm::SortedSet targets = m_disassembler->getTargets(instruction->address);
+
+            for(size_t i = 0; i < targets.size(); i++)
             {
+                address_t target = targets[i].toU64();
+
                 if(target == instruction->address)
                     continue;
 
@@ -47,22 +51,25 @@ void DisassemblerColumnView::renderArrows(size_t start, size_t count)
                 this->insertPath(item, start, idx);
             }
         }
-        else if(item->is(REDasm::ListingItem::SymbolItem))
+        else if(item->is(REDasm::ListingItemType::SymbolItem))
         {
-            const REDasm::Symbol* symbol = document->symbol(item->address);
+            const REDasm::Symbol* symbol = document->symbol(item->address_new);
 
             if(!symbol || !symbol->is(REDasm::SymbolType::Code))
                 continue;
 
-            REDasm::ReferenceVector refs = m_disassembler->getReferences(item->address);
-            size_t toidx = document->instructionIndex(item->address);
+            size_t toidx = document->instructionIndex(item->address_new);
 
             if(toidx >= document->size())
                 continue;
 
-            for(address_t ref : refs)
+            REDasm::SortedSet refs = m_disassembler->getReferences(item->address_new);
+
+            for(size_t i = 0; i < refs.size(); i++)
             {
-                if(ref == item->address)
+                address_t ref = refs[i].toU64();
+
+                if(ref == item->address_new)
                     continue;
 
                 size_t idx = document->instructionIndex(ref);
@@ -89,7 +96,14 @@ void DisassemblerColumnView::paintEvent(QPaintEvent*)
 
     QPainter painter(this);
     QFontMetrics fm = this->fontMetrics();
-    int w = fm.width(" "), h = fm.height(), x = this->width() - (w * 2);
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+    int w = fm.horizontalAdvance(" ");
+#else
+    int w = fm.width(" ");
+#endif
+
+    int h = fm.height(), x = this->width() - (w * 2);
 
     for(auto it = m_paths.begin(); it != m_paths.end(); it++, x -= w)
     {
@@ -128,7 +142,13 @@ bool DisassemblerColumnView::isPathSelected(const DisassemblerColumnView::ArrowP
 
 void DisassemblerColumnView::fillArrow(QPainter* painter, int y, const QFontMetrics& fm)
 {
-    int w = fm.width(" ") / 2, hl = fm.height() / 3;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+    int w = fm.horizontalAdvance(" ") / 2;
+#else
+    int w = fm.width(" ") / 2;
+#endif
+
+    int hl = fm.height() / 3;
 
     QPainterPath path;
     path.moveTo(QPoint(this->width() - w, y));
@@ -144,7 +164,7 @@ void DisassemblerColumnView::insertPath(REDasm::ListingItem* fromitem, u64 fromi
 {
     auto& document = m_disassembler->document();
     auto pair = qMakePair(fromidx, toidx);
-    REDasm::InstructionPtr frominstruction = document->instruction(fromitem->address);
+    REDasm::CachedInstruction frominstruction = document->instruction(fromitem->address_new);
 
     if(!frominstruction || !frominstruction->is(REDasm::InstructionType::Jump) || m_done.contains(pair))
         return;

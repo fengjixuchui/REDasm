@@ -1,6 +1,8 @@
 #include "disassemblertextview.h"
 #include "../../models/disassemblermodel.h"
-#include <redasm/plugins/loader.h>
+#include "../../convert.h"
+#include <redasm/plugins/loader/loader.h>
+#include <redasm/context.h>
 #include <QtWidgets>
 #include <QtGui>
 #include <cmath>
@@ -37,7 +39,7 @@ DisassemblerTextView::DisassemblerTextView(QWidget *parent): QAbstractScrollArea
     if(refreshfreq <= 0)
         refreshfreq = FALLBACK_REFRESH_RATE;
 
-    REDasm::log("Setting refresh rate to " + QString::number(refreshfreq, 'f', 1).toStdString() + "Hz");
+    r_ctx->log("Setting refresh rate to " + Convert::to_rstring(QString::number(refreshfreq, 'f', 1)) + "Hz");
     m_refreshrate = std::ceil((1 / refreshfreq) * 1000);
     m_blinktimerid = this->startTimer(CURSOR_BLINK_INTERVAL);
 }
@@ -58,16 +60,16 @@ DisassemblerTextView::~DisassemblerTextView()
 }
 
 DisassemblerActions *DisassemblerTextView::disassemblerActions() const { return m_actions; }
-std::string DisassemblerTextView::currentWord() const { return m_renderer ? m_renderer->getCurrentWord() : std::string(); }
-bool DisassemblerTextView::canGoBack() const { return this->currentDocument()->cursor()->canGoBack(); }
-bool DisassemblerTextView::canGoForward() const { return this->currentDocument()->cursor()->canGoForward(); }
+REDasm::String DisassemblerTextView::currentWord() const { return m_renderer ? m_renderer->getCurrentWord() : REDasm::String(); }
+bool DisassemblerTextView::canGoBack() const { return this->currentDocumentNew()->cursor().canGoBack(); }
+bool DisassemblerTextView::canGoForward() const { return this->currentDocumentNew()->cursor().canGoForward(); }
 
 size_t DisassemblerTextView::visibleLines() const
 {
     QFontMetrics fm = this->fontMetrics();
     size_t vl = std::ceil(this->height() / fm.height());
 
-    if((vl <= 1) && (this->currentDocument()->size() >= DOCUMENT_IDEAL_SIZE))
+    if((vl <= 1) && (this->currentDocumentNew()->itemsCount() >= DOCUMENT_IDEAL_SIZE))
         return DOCUMENT_IDEAL_SIZE;
 
     return vl;
@@ -80,9 +82,9 @@ void DisassemblerTextView::setDisassembler(const REDasm::DisassemblerPtr& disass
 {
     m_disassembler = disassembler;
 
-    EVENT_CONNECT(this->currentDocument(), changed, this, std::bind(&DisassemblerTextView::onDocumentChanged, this, std::placeholders::_1));
+    this->currentDocumentNew()->changed.connect(this, std::bind(&DisassemblerTextView::onDocumentChanged, this, std::placeholders::_1));
 
-    EVENT_CONNECT(this->currentDocument()->cursor(), positionChanged, this, [&]() {
+    this->currentDocumentNew()->cursor().positionChanged.connect(this, [&](REDasm::EventArgs*) {
         QMetaObject::invokeMethod(this, "moveToSelection", Qt::QueuedConnection);
     });
 
@@ -90,7 +92,7 @@ void DisassemblerTextView::setDisassembler(const REDasm::DisassemblerPtr& disass
 
     connect(this->verticalScrollBar(), &QScrollBar::valueChanged, this, [&](int) { this->renderListing(); });
 
-    m_renderer = std::make_unique<ListingTextRenderer>(m_disassembler.get());
+    m_renderer = std::make_unique<ListingTextRenderer>();
 
     if(m_actions)
     {
@@ -107,7 +109,7 @@ void DisassemblerTextView::setDisassembler(const REDasm::DisassemblerPtr& disass
     m_disassemblerpopup = new DisassemblerPopup(m_disassembler, this);
 
     if(!m_disassembler->busy())
-        this->currentDocument()->cursor()->positionChanged();
+        this->currentDocumentNew()->cursor().positionChanged();
 }
 
 void DisassemblerTextView::copy()
@@ -138,18 +140,18 @@ void DisassemblerTextView::blinkCursor()
 
     if(m_disassembler->busy())
     {
-        this->currentDocument()->cursor()->toggle();
+        this->currentDocumentNew()->cursor().toggle();
         return;
     }
 
-    auto lock = REDasm::s_lock_safe_ptr(this->currentDocument());
+    auto lock = REDasm::s_lock_safe_ptr(this->currentDocumentNew());
 
     if(!this->hasFocus())
-        lock->cursor()->disable();
+        lock->cursor().disable();
     else
-        lock->cursor()->toggle();
+        lock->cursor().toggle();
 
-    this->renderLine(lock->cursor()->currentLine());
+    this->renderLine(lock->cursor().currentLine());
 }
 
 void DisassemblerTextView::scrollContentsBy(int dx, int dy)
@@ -192,17 +194,17 @@ void DisassemblerTextView::resizeEvent(QResizeEvent *e)
 
 void DisassemblerTextView::mousePressEvent(QMouseEvent *e)
 {
-    REDasm::ListingCursor* cur = this->currentDocument()->cursor();
+    const REDasm::ListingCursor& cur = this->currentDocumentNew()->cursor();
 
-    if((e->button() == Qt::LeftButton) || (!cur->hasSelection() && (e->button() == Qt::RightButton)))
+    if((e->button() == Qt::LeftButton) || (!cur.hasSelection() && (e->button() == Qt::RightButton)))
     {
         e->accept();
         m_renderer->moveTo(e->pos());
     }
     else if(e->button() == Qt::BackButton)
-        this->currentDocument()->cursor()->goBack();
+        this->currentDocumentNew()->cursor().goBack();
     else if(e->button() == Qt::ForwardButton)
-        this->currentDocument()->cursor()->goForward();
+        this->currentDocumentNew()->cursor().goForward();
 
     QAbstractScrollArea::mousePressEvent(e);
 }
@@ -212,7 +214,7 @@ void DisassemblerTextView::mouseMoveEvent(QMouseEvent *e)
     if(e->buttons() == Qt::LeftButton)
     {
         e->accept();
-        this->currentDocument()->cursor()->disable();
+        this->currentDocumentNew()->cursor().disable();
 
         QPoint pos = e->pos();
         pos.rx() = std::max(0, pos.x());
@@ -264,71 +266,71 @@ void DisassemblerTextView::wheelEvent(QWheelEvent *e)
 
 void DisassemblerTextView::keyPressEvent(QKeyEvent *e)
 {
-    auto lock = REDasm::s_lock_safe_ptr(this->currentDocument());
-    REDasm::ListingCursor* cur = lock->cursor();
-    cur->enable();
+    auto lock = REDasm::s_lock_safe_ptr(this->currentDocumentNew());
+    REDasm::ListingCursor& cur = lock->cursor();
+    cur.enable();
 
     if(e->matches(QKeySequence::MoveToNextChar) || e->matches(QKeySequence::SelectNextChar))
     {
-        size_t len = m_renderer->getLastColumn(cur->currentLine());
+        size_t len = m_renderer->getLastColumn(cur.currentLine());
 
-        if(len == cur->currentColumn())
+        if(len == cur.currentColumn())
             return;
 
         if(e->matches(QKeySequence::MoveToNextChar))
-            cur->moveTo(cur->currentLine(), std::min(len, cur->currentColumn() + 1));
+            cur.moveTo(cur.currentLine(), std::min(len, cur.currentColumn() + 1));
         else
-            cur->select(cur->currentLine(), std::min(len, cur->currentColumn() + 1));
+            cur.select(cur.currentLine(), std::min(len, cur.currentColumn() + 1));
     }
     else if(e->matches(QKeySequence::MoveToPreviousChar) || e->matches(QKeySequence::SelectPreviousChar))
     {
-        if(!cur->currentColumn())
+        if(!cur.currentColumn())
             return;
 
         if(e->matches(QKeySequence::MoveToPreviousChar))
-            cur->moveTo(cur->currentLine(), std::max(size_t(0), cur->currentColumn() - 1));
+            cur.moveTo(cur.currentLine(), std::max(size_t(0), cur.currentColumn() - 1));
         else
-            cur->select(cur->currentLine(), std::max(size_t(0), cur->currentColumn() - 1));
+            cur.select(cur.currentLine(), std::max(size_t(0), cur.currentColumn() - 1));
     }
     else if(e->matches(QKeySequence::MoveToNextLine) || e->matches(QKeySequence::SelectNextLine))
     {
-        if(lock->lastLine()  == cur->currentLine())
+        if((lock->itemsCount() - 1)  == cur.currentLine())
             return;
 
-        size_t nextline = cur->currentLine() + 1;
+        size_t nextline = cur.currentLine() + 1;
 
         if(e->matches(QKeySequence::MoveToNextLine))
-            cur->moveTo(nextline, std::min(cur->currentColumn(), m_renderer->getLastColumn(nextline)));
+            cur.moveTo(nextline, std::min(cur.currentColumn(), m_renderer->getLastColumn(nextline)));
         else
-            cur->select(nextline, std::min(cur->currentColumn(), m_renderer->getLastColumn(nextline)));
+            cur.select(nextline, std::min(cur.currentColumn(), m_renderer->getLastColumn(nextline)));
     }
     else if(e->matches(QKeySequence::MoveToPreviousLine) || e->matches(QKeySequence::SelectPreviousLine))
     {
-        if(!cur->currentLine())
+        if(!cur.currentLine())
             return;
 
-        size_t prevline = cur->currentLine() - 1;
+        size_t prevline = cur.currentLine() - 1;
 
         if(e->matches(QKeySequence::MoveToPreviousLine))
-            cur->moveTo(prevline, std::min(cur->currentColumn(), m_renderer->getLastColumn(prevline)));
+            cur.moveTo(prevline, std::min(cur.currentColumn(), m_renderer->getLastColumn(prevline)));
         else
-            cur->select(prevline, std::min(cur->currentColumn(), m_renderer->getLastColumn(prevline)));
+            cur.select(prevline, std::min(cur.currentColumn(), m_renderer->getLastColumn(prevline)));
     }
     else if(e->matches(QKeySequence::MoveToNextPage) || e->matches(QKeySequence::SelectNextPage))
     {
-        if(lock->lastLine()  == cur->currentLine())
+        if((lock->itemsCount() - 1) == cur.currentLine())
             return;
 
-        size_t pageline = std::min(lock->lastLine(), this->firstVisibleLine() + this->visibleLines());
+        size_t pageline = std::min(lock->itemsCount() - 1, this->firstVisibleLine() + this->visibleLines());
 
         if(e->matches(QKeySequence::MoveToNextPage))
-            cur->moveTo(pageline, std::min(cur->currentColumn(), m_renderer->getLastColumn(pageline)));
+            cur.moveTo(pageline, std::min(cur.currentColumn(), m_renderer->getLastColumn(pageline)));
         else
-            cur->select(pageline, std::min(cur->currentColumn(), m_renderer->getLastColumn(pageline)));
+            cur.select(pageline, std::min(cur.currentColumn(), m_renderer->getLastColumn(pageline)));
     }
     else if(e->matches(QKeySequence::MoveToPreviousPage) || e->matches(QKeySequence::SelectPreviousPage))
     {
-        if(!cur->currentLine())
+        if(!cur.currentLine())
             return;
 
         size_t pageline = 0;
@@ -337,43 +339,43 @@ void DisassemblerTextView::keyPressEvent(QKeyEvent *e)
             pageline = std::max(size_t(0), this->firstVisibleLine() - this->visibleLines());
 
         if(e->matches(QKeySequence::MoveToPreviousPage))
-            cur->moveTo(pageline, std::min(cur->currentColumn(), m_renderer->getLastColumn(pageline)));
+            cur.moveTo(pageline, std::min(cur.currentColumn(), m_renderer->getLastColumn(pageline)));
         else
-            cur->select(pageline, std::min(cur->currentColumn(), m_renderer->getLastColumn(pageline)));
+            cur.select(pageline, std::min(cur.currentColumn(), m_renderer->getLastColumn(pageline)));
     }
     else if(e->matches(QKeySequence::MoveToStartOfDocument) || e->matches(QKeySequence::SelectStartOfDocument))
     {
-        if(!cur->currentLine())
+        if(!cur.currentLine())
             return;
 
         if(e->matches(QKeySequence::MoveToStartOfDocument))
-            cur->moveTo(0, 0);
+            cur.moveTo(0, 0);
         else
-            cur->select(0, 0);
+            cur.select(0, 0);
     }
     else if(e->matches(QKeySequence::MoveToEndOfDocument) || e->matches(QKeySequence::SelectEndOfDocument))
     {
-        if(lock->lastLine() == cur->currentLine())
+        if((lock->itemsCount() - 1) == cur.currentLine())
             return;
 
         if(e->matches(QKeySequence::MoveToEndOfDocument))
-            cur->moveTo(lock->lastLine(), m_renderer->getLastColumn(lock->lastLine()));
+            cur.moveTo(lock->itemsCount() - 1, m_renderer->getLastColumn(lock->itemsCount() - 1));
         else
-            cur->select(lock->lastLine(), m_renderer->getLastColumn(lock->lastLine()));
+            cur.select(lock->itemsCount() - 1, m_renderer->getLastColumn(lock->itemsCount() - 1));
     }
     else if(e->matches(QKeySequence::MoveToStartOfLine) || e->matches(QKeySequence::SelectStartOfLine))
     {
         if(e->matches(QKeySequence::MoveToStartOfLine))
-            cur->moveTo(cur->currentLine(), 0);
+            cur.moveTo(cur.currentLine(), 0);
         else
-            cur->select(cur->currentLine(), 0);
+            cur.select(cur.currentLine(), 0);
     }
     else if(e->matches(QKeySequence::MoveToEndOfLine) || e->matches(QKeySequence::SelectEndOfLine))
     {
         if(e->matches(QKeySequence::MoveToEndOfLine))
-            cur->moveTo(cur->currentLine(), m_renderer->getLastColumn(cur->currentLine()));
+            cur.moveTo(cur.currentLine(), m_renderer->getLastColumn(cur.currentLine()));
         else
-            cur->select(cur->currentLine(), m_renderer->getLastColumn(cur->currentLine()));
+            cur.select(cur.currentLine(), m_renderer->getLastColumn(cur.currentLine()));
     }
     else if(e->key() == Qt::Key_Space)
         emit switchView();
@@ -407,34 +409,39 @@ bool DisassemblerTextView::event(QEvent *e)
     return QAbstractScrollArea::event(e);
 }
 
-void DisassemblerTextView::paintLines(QPainter *painter, u64 first, u64 last)
+void DisassemblerTextView::paintLines(QPainter *painter, size_t first, size_t last)
 {
-    u64 count = (last - first) + 1;
+    if(first > last)
+        return;
+
+    size_t count = (last - first) + 1;
     m_renderer->render(first, count, painter);
 }
 
-void DisassemblerTextView::onDocumentChanged(const REDasm::ListingDocumentChanged *ldc)
+void DisassemblerTextView::onDocumentChanged(REDasm::EventArgs *e)
 {
-    m_disassembler->document()->cursor()->clearSelection();
+    REDasm::ListingDocumentChangedEventArgs *ldc = static_cast<REDasm::ListingDocumentChangedEventArgs*>(e);
+
+    this->currentDocumentNew()->cursor().clearSelection();
     this->adjustScrollBars();
 
-    if(ldc->action != REDasm::ListingDocumentChanged::Changed) // Insertion or Deletion
+    if(ldc->action() != REDasm::ListingDocumentAction::Changed) // Insertion or Deletion
     {
-        if(ldc->index > this->lastVisibleLine()) // Don't care of bottom Insertion/Deletion
+        if(ldc->index() > this->lastVisibleLine()) // Don't care of bottom Insertion/Deletion
             return;
 
-        //QMetaObject::invokeMethod(this, "renderListing", Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, "renderListing", Qt::QueuedConnection);
     }
     else
-        QMetaObject::invokeMethod(this, "renderLine", Qt::QueuedConnection, Q_ARG(u64, ldc->index));
+        QMetaObject::invokeMethod(this, "renderLine", Qt::QueuedConnection, Q_ARG(size_t, ldc->index()));
 }
 
-REDasm::ListingDocument &DisassemblerTextView::currentDocument() { return m_disassembler->document(); }
-const REDasm::ListingDocument &DisassemblerTextView::currentDocument() const { return m_disassembler->document();  }
+REDasm::ListingDocumentNew& DisassemblerTextView::currentDocumentNew() { return m_disassembler->documentNew(); }
+const REDasm::ListingDocumentNew& DisassemblerTextView::currentDocumentNew() const { return m_disassembler->documentNew(); }
 
 const REDasm::Symbol* DisassemblerTextView::symbolUnderCursor()
 {
-    auto lock = REDasm::s_lock_safe_ptr(this->currentDocument());
+    auto lock = REDasm::s_lock_safe_ptr(this->currentDocumentNew());
     return lock->symbol(m_renderer->getCurrentWord());
 }
 
@@ -517,34 +524,35 @@ void DisassemblerTextView::adjustScrollBars()
         return;
 
     QScrollBar* vscrollbar = this->verticalScrollBar();
-    auto lock = REDasm::s_lock_safe_ptr(this->currentDocument());
+    auto lock = REDasm::s_lock_safe_ptr(this->currentDocumentNew());
+    size_t vl = this->visibleLines();
 
-    if(static_cast<int>(lock->size()) <= this->visibleLines())
-        vscrollbar->setMaximum(static_cast<int>(lock->size()));
+    if(lock->itemsCount() <= vl)
+        vscrollbar->setMaximum(static_cast<int>(lock->itemsCount()));
     else
-        vscrollbar->setMaximum(static_cast<int>(lock->size() - this->visibleLines() + 1));
+        vscrollbar->setMaximum(static_cast<int>(lock->itemsCount() - vl + 1));
 
     this->ensureColumnVisible();
 }
 
 void DisassemblerTextView::moveToSelection()
 {
-    auto lock = REDasm::s_lock_safe_ptr(this->currentDocument());
-    REDasm::ListingCursor* cur = lock->cursor();
+    auto lock = REDasm::s_lock_safe_ptr(this->currentDocumentNew());
+    REDasm::ListingCursor& cur = lock->cursor();
 
-    if(!this->isLineVisible(cur->currentLine())) // Center on selection
+    if(!this->isLineVisible(cur.currentLine())) // Center on selection
     {
         QScrollBar* vscrollbar = this->verticalScrollBar();
-        vscrollbar->setValue(std::max(static_cast<s64>(0), static_cast<s64>(cur->currentLine() - this->visibleLines() / 2)));
+        vscrollbar->setValue(std::max(static_cast<size_t>(0), static_cast<size_t>(cur.currentLine() - this->visibleLines() / 2)));
     }
     else
         this->renderListing();
 
     this->ensureColumnVisible();
-    REDasm::ListingItem* item = lock->itemAt(cur->currentLine());
+    REDasm::ListingItem item = lock->itemAt(cur.currentLine());
 
-    if(item)
-        emit addressChanged(item->address);
+    if(item.isValid())
+        emit addressChanged(item.address_new);
 }
 
 void DisassemblerTextView::ensureColumnVisible()
@@ -552,11 +560,11 @@ void DisassemblerTextView::ensureColumnVisible()
     if(!m_disassembler)
         return;
 
-    auto lock = REDasm::s_lock_safe_ptr(this->currentDocument());
-    REDasm::ListingCursor* cur = lock->cursor();
+    auto lock = REDasm::s_lock_safe_ptr(this->currentDocumentNew());
+    const REDasm::ListingCursor& cur = lock->cursor();
     size_t xpos = 0;
 
-    if(this->isColumnVisible(cur->currentColumn(), &xpos))
+    if(this->isColumnVisible(cur.currentColumn(), &xpos))
         return;
 
     QScrollBar* hscrollbar = this->horizontalScrollBar();
@@ -565,12 +573,12 @@ void DisassemblerTextView::ensureColumnVisible()
 
 void DisassemblerTextView::showPopup(const QPoint& pos)
 {
-    std::string word = m_renderer->getWordFromPos(pos);
+    REDasm::String word = m_renderer->getWordFromPos(pos);
 
     if(!word.empty())
     {
         REDasm::ListingCursor::Position cp = m_renderer->hitTest(pos);
-        m_disassemblerpopup->popup(word, cp.first);
+        m_disassemblerpopup->popup(word, cp.line);
         return;
     }
 
