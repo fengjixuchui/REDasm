@@ -31,15 +31,15 @@ DisassemblerView::DisassemblerView(QLineEdit *lefilter, QWidget *parent) : QWidg
     ui->stackedWidget->addWidget(m_graphview);
 
     m_importsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItemType::SymbolItem, ui->tvImports);
-    static_cast<SymbolTableModel*>(m_importsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::ImportMask);
+    static_cast<SymbolTableModel*>(m_importsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::ImportNew);
     ui->tvImports->setModel(m_importsmodel);
 
     m_exportsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItemType::AllItems, ui->tvExports);
-    static_cast<SymbolTableModel*>(m_exportsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::ExportMask);
-    ui->tvExports->setModel(m_exportsmodel);
+    //static_cast<SymbolTableModel*>(m_exportsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::ExportNew);
+    //ui->tvExports->setModel(m_exportsmodel);
 
     m_stringsmodel = ListingFilterModel::createFilter<SymbolTableModel>(REDasm::ListingItemType::SymbolItem, ui->tvStrings);
-    static_cast<SymbolTableModel*>(m_stringsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::StringMask);
+    static_cast<SymbolTableModel*>(m_stringsmodel->sourceModel())->setSymbolType(REDasm::SymbolType::StringNew);
     ui->tvStrings->setModel(m_stringsmodel);
 
     m_segmentsmodel = ListingFilterModel::createFilter<SegmentsModel>(ui->tvSegments);
@@ -61,9 +61,9 @@ DisassemblerView::DisassemblerView(QLineEdit *lefilter, QWidget *parent) : QWidg
     ui->tvImports->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     ui->tvImports->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     ui->tvImports->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    ui->tvExports->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    ui->tvExports->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    ui->tvExports->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    //ui->tvExports->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    //ui->tvExports->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    //ui->tvExports->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     ui->tvStrings->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     ui->tvStrings->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     ui->tvStrings->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -123,7 +123,7 @@ DisassemblerView::DisassemblerView(QLineEdit *lefilter, QWidget *parent) : QWidg
 DisassemblerView::~DisassemblerView() { delete ui; }
 REDasm::Disassembler *DisassemblerView::disassembler() { return m_disassembler.get(); }
 
-void DisassemblerView::bindDisassembler(REDasm::Disassembler *disassembler, bool fromdatabase)
+void DisassemblerView::bindDisassembler(REDasm::Disassembler *disassembler)
 {
     m_disassembler = REDasm::DisassemblerPtr(disassembler); // Take ownership
 
@@ -163,9 +163,6 @@ void DisassemblerView::bindDisassembler(REDasm::Disassembler *disassembler, bool
 
     m_actions->setEnabled(DisassemblerViewActions::BackAction, m_disassembler->document()->cursor()->canGoBack());
     m_actions->setEnabled(DisassemblerViewActions::ForwardAction, m_disassembler->document()->cursor()->canGoForward());
-
-    if(!fromdatabase)
-        m_disassembler->disassemble();
 }
 
 void DisassemblerView::hideActions()
@@ -238,17 +235,17 @@ void DisassemblerView::goTo(const QModelIndex &index)
     if(!index.isValid())
         return;
 
-    const REDasm::ListingItem* item = this->itemFromIndex(index);
+    REDasm::ListingItem item = this->itemFromIndex(index);
 
-    if(!item)
+    if(item.isValid())
         return;
 
-    m_disassembler->document()->goTo(item);
+    //FIXME: m_disassembler->document()->goTo(item);
 
-    if(!m_graphview->isCursorInGraph())
-        ui->stackedWidget->setCurrentWidget(m_listingview);
+    //FIXME: if(!m_graphview->isCursorInGraph())
+    //FIXME:     ui->stackedWidget->setCurrentWidget(m_listingview);
 
-    this->showListingOrGraph();
+    //FIXME: this->showListingOrGraph();
 }
 
 void DisassemblerView::showModelReferences()
@@ -256,22 +253,22 @@ void DisassemblerView::showModelReferences()
     if(!m_currentindex.isValid())
         return;
 
-    const REDasm::ListingItem* item = this->itemFromIndex(m_currentindex);
+    //FIXME: const REDasm::ListingItem* item = this->itemFromIndex(m_currentindex);
 
-    if(!item)
-        return;
+    //FIXME: if(!item)
+    //FIXME:     return;
 
-    const REDasm::Symbol* symbol = nullptr;
+    //FIXME: const REDasm::Symbol* symbol = nullptr;
 
-    if(m_currentindex.model() == m_docks->callTreeModel())
-    {
-        REDasm::CachedInstruction instruction = m_disassembler->document()->instruction(item->address());
-        symbol = m_disassembler->document()->symbol(m_disassembler->getTarget(instruction->address));
-    }
-    else
-        symbol = m_disassembler->document()->symbol(item->address());
+    //FIXME: if(m_currentindex.model() == m_docks->callTreeModel())
+    //FIXME: {
+    //FIXME:     REDasm::CachedInstruction instruction = m_disassembler->document()->instruction(item->address());
+    //FIXME:     symbol = m_disassembler->document()->symbol(m_disassembler->getTarget(instruction->address));
+    //FIXME: }
+    //FIXME: else
+    //FIXME:     symbol = m_disassembler->document()->symbol(item->address());
 
-    this->showReferences(symbol->address);
+    //FIXME: this->showReferences(symbol->address);
 }
 
 void DisassemblerView::showCurrentItemInfo()
@@ -282,22 +279,20 @@ void DisassemblerView::showCurrentItemInfo()
 
 void DisassemblerView::showReferences(address_t address)
 {
-    const REDasm::Symbol* symbol = m_disassembler->document()->symbol(address);
+    const REDasm::Symbol* symbol = r_docnew->symbol(address);
+    if(!symbol) return;
 
-    if(!symbol)
-        return;
-
-    if(!m_disassembler->getReferencesCount(symbol->address))
+    if(!r_disasm->getReferencesCount(symbol->address))
     {
         QMessageBox::information(this, "No References", "There are no references to " + S_TO_QS(symbol->name));
         return;
     }
 
-    ReferencesDialog dlgreferences(m_disassembler, symbol, this);
+    ReferencesDialog dlgreferences(symbol, this);
 
     connect(&dlgreferences, &ReferencesDialog::jumpTo, this, [&](address_t address) {
         if(ui->stackedWidget->currentWidget() == m_graphview) {
-            if(m_disassembler->document()->instructionItem(address)) {
+            if(r_docnew->itemInstruction(address).isValid()) {
                 m_graphview->goTo(address);
                 return;
             }
@@ -305,7 +300,7 @@ void DisassemblerView::showReferences(address_t address)
             this->switchGraphListing();
         }
 
-        m_disassembler->document()->goTo(address);
+        r_docnew->goTo(address);
         ui->tabView->setCurrentWidget(ui->tabListing);
     });
 
@@ -314,19 +309,16 @@ void DisassemblerView::showReferences(address_t address)
 
 void DisassemblerView::displayAddress(address_t address)
 {
-    if(m_disassembler->busy())
-        return;
+    if(r_disasm->busy()) return;
 
     REDasm::ListingDocument& document = m_disassembler->document();
-    REDasm::Loader* loader = m_disassembler->loader();
-    REDasm::Assembler* assembler = m_disassembler->assembler();
-    const REDasm::Segment* segment = document->segment(address);
+    const REDasm::Segment* segment = r_docnew->segment(address);
     const REDasm::Symbol* functionstart = document->functionStartSymbol(address);
-    offset_location offset = loader->offset(address);
+    offset_location offset = r_ldr->offset(address);
 
     QString segm = segment ? S_TO_QS(segment->name) : "UNKNOWN",
-            offs = segment && offset.valid ? S_TO_QS(REDasm::String::hex(offset.value, assembler->bits())) : "UNKNOWN",
-            addr = S_TO_QS(REDasm::String::hex(address, assembler->bits()));
+            offs = segment && offset.valid ? S_TO_QS(REDasm::String::hex(offset.value, r_asm->bits())) : "UNKNOWN",
+            addr = S_TO_QS(REDasm::String::hex(address, r_asm->bits()));
 
     QString s = QString::fromWCharArray(L"<b>Address: </b>%1\u00A0\u00A0").arg(addr);
     s += QString::fromWCharArray(L"<b>Offset: </b>%1\u00A0\u00A0").arg(offs);
@@ -349,12 +341,11 @@ void DisassemblerView::displayAddress(address_t address)
 
 void DisassemblerView::displayCurrentReferences()
 {
-    REDasm::ListingDocument& document = m_disassembler->document();
     REDasm::String word = this->currentWord();
 
     if(!word.empty())
     {
-        const REDasm::Symbol* symbol = document->symbol(word);
+        const REDasm::Symbol* symbol = r_docnew->symbol(word);
 
         if(symbol)
         {
@@ -363,14 +354,13 @@ void DisassemblerView::displayCurrentReferences()
         }
     }
 
-    REDasm::ListingItem* item = document->itemAt(document->cursor()->currentLine());
-    m_docks->referencesModel()->xref(item->address());
+    REDasm::ListingItem item = r_docnew->itemAt(r_docnew->cursor().currentLine());
+    m_docks->referencesModel()->xref(item.address_new);
 }
 
 void DisassemblerView::switchGraphListing()
 {
-    if(m_disassembler->busy())
-        return;
+    if(r_disasm->busy()) return;
 
     if(ui->stackedWidget->currentWidget() == m_listingview)
     {
@@ -395,10 +385,8 @@ void DisassemblerView::switchToHexDump()
 
 void DisassemblerView::toggleFilter()
 {
-    if(m_lefilter->isVisible())
-        this->clearFilter();
-    else
-        this->showFilter();
+    if(m_lefilter->isVisible()) this->clearFilter();
+    else this->showFilter();
 }
 
 void DisassemblerView::filterSymbols()
@@ -413,18 +401,14 @@ void DisassemblerView::filterSymbols()
 
 void DisassemblerView::showListingOrGraph()
 {
-    if(!ui->tabView->currentIndex())
-        return;
-
+    if(!ui->tabView->currentIndex()) return;
     ui->tabView->setCurrentIndex(0);
 }
 
 void DisassemblerView::showFilter()
 {
     ListingFilterModel* filtermodel = this->getSelectedFilterModel();
-
-    if(!filtermodel)
-        return;
+    if(!filtermodel) return;
 
     m_lefilter->show();
     m_lefilter->setFocus();
@@ -445,9 +429,7 @@ void DisassemblerView::clearFilter()
 void DisassemblerView::selectToHexDump(address_t address, u64 len)
 {
     offset_location offset = m_disassembler->loader()->offset(address);
-
-    if(!offset.valid)
-        return;
+    if(!offset.valid) return;
 
     ui->tabView->setCurrentWidget(ui->tabHexDump);
 
@@ -483,19 +465,19 @@ void DisassemblerView::showGoto()
 void DisassemblerView::goForward() { m_disassembler->document()->cursor()->goForward(); }
 void DisassemblerView::goBack() { m_disassembler->document()->cursor()->goBack(); }
 
-const REDasm::ListingItem *DisassemblerView::itemFromIndex(const QModelIndex &index) const
+REDasm::ListingItem DisassemblerView::itemFromIndex(const QModelIndex &index) const
 {
     const ListingFilterModel* filtermodel = dynamic_cast<const ListingFilterModel*>(index.model());
 
     if(filtermodel)
         return filtermodel->item(index);
 
-    const GotoModel* gotomodel = dynamic_cast<const GotoModel*>(index.model());
+    //FIXME: const GotoModel* gotomodel = dynamic_cast<const GotoModel*>(index.model());
 
-    if(gotomodel)
-        return reinterpret_cast<REDasm::ListingItem*>(index.internalPointer());
+    //FIXME: if(gotomodel)
+    //FIXME:     return reinterpret_cast<REDasm::ListingItem*>(index.internalPointer());
 
-    return nullptr;
+    return REDasm::ListingItem();
 }
 
 void DisassemblerView::syncHexEdit()
@@ -508,14 +490,14 @@ void DisassemblerView::syncHexEdit()
 
     if(item)
     {
-        offset = m_disassembler->loader()->offset(item->address());
+        offset = m_disassembler->loader()->offset(item->address_new);
 
         bool canbeinstruction = true;
         const REDasm::Symbol* symbol = nullptr;
 
         if(item->is(REDasm::ListingItemType::SymbolItem))
         {
-            symbol = document->symbol(item->address());
+            symbol = document->symbol(item->address_new);
             canbeinstruction = symbol->is(REDasm::SymbolType::Code);
         }
         else if(item->is(REDasm::ListingItemType::SegmentItem))
@@ -523,7 +505,7 @@ void DisassemblerView::syncHexEdit()
 
         if(canbeinstruction)
         {
-            REDasm::CachedInstruction instruction = document->instruction(item->address());
+            REDasm::CachedInstruction instruction = document->instruction(item->address_new);
 
             if(!instruction)
                 return;

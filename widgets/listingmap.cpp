@@ -127,9 +127,9 @@ void ListingMap::renderFunctions(QPainter *painter)
 
     for(size_t i = 0; i < lock->functions()->size(); i++)
     {
-        REDasm::ListingItem* item = lock->functions()->at(i);
-        const REDasm::Symbol* symbol = lock->symbol(item->address());
-        const REDasm::FunctionGraph* g = lock->functions()->graph(item);
+        address_t address = lock->functions()->at(i);
+        const REDasm::Symbol* symbol = lock->symbol(address);
+        const REDasm::FunctionGraph* g = lock->functions()->graph(address);
 
         if(!g)
             continue;
@@ -140,7 +140,8 @@ void ListingMap::renderFunctions(QPainter *painter)
             if(!fbb)
                 return;
 
-            QRect r = this->buildRect(this->calculatePosition(fbb->startIndex()), this->calculateSize(fbb->count()));
+            REDasm::ListingItem* startitem = fbb->startItem();
+            QRect r = this->buildRect(this->calculatePosition(m_disassembler->loader()->offset(startitem->address_new)), this->calculateSize(fbb->count()));
 
             if(m_orientation == Qt::Horizontal)
                 r.setHeight(fsize);
@@ -162,7 +163,7 @@ void ListingMap::renderSeek(QPainter *painter)
     if(!item)
         return;
 
-    offset_location offset  = m_disassembler->loader()->offset(item->address());
+    offset_location offset  = m_disassembler->loader()->offset(item->address_new);
 
     if(!offset.valid)
         return;

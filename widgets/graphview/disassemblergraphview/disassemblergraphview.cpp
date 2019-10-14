@@ -106,7 +106,7 @@ void DisassemblerGraphView::onMenuRequested()
 void DisassemblerGraphView::goTo(address_t address)
 {
     auto& document = m_disassembler->document();
-    document->cursor()->moveTo(document->findInstruction(address));
+    document->cursor()->moveTo(document->instructionIndex(address));
     this->renderGraph();
 }
 
@@ -133,11 +133,12 @@ bool DisassemblerGraphView::renderGraph()
         return true;
 
     m_currentfunction = currentfunction;
-    auto* graph = document->functions()->graph(currentfunction);
+    auto* graph = document->functions()->graph(currentfunction->address_new);
 
     if(!graph)
     {
-        r_ctx->log("Graph creation failed @ " + REDasm::String::hex(currentfunction->address()));
+        m_currentfunction = nullptr;
+        r_ctx->log("Graph creation failed @ " + REDasm::String::hex(currentfunction->address_new));
         return false;
     }
 
@@ -210,21 +211,21 @@ REDasm::String DisassemblerGraphView::getEdgeLabel(const REDasm::Edge& e) const
     const REDasm::FunctionBasicBlock* fromfbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.source));
     const REDasm::FunctionBasicBlock* tofbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.target));
     REDasm::ListingDocument& document = m_disassembler->document();
-    const REDasm::ListingItem* fromitem = document->itemAt(fromfbb->endIndex());
-    REDasm::CachedInstruction instruction = document->instruction(fromitem->address());
+    const REDasm::ListingItem* fromitem = fromfbb->endItem();
+    REDasm::CachedInstruction instruction = document->instruction(fromitem->address_new);
     REDasm::String label;
 
     if(instruction && instruction->is(REDasm::InstructionType::Conditional))
     {
-        const REDasm::ListingItem* toitem = document->itemAt(tofbb->startIndex());
+        const REDasm::ListingItem* toitem = tofbb->startItem();
 
-        if(m_disassembler->getTarget(instruction->address) == toitem->address())
+        if(m_disassembler->getTarget(instruction->address) == toitem->address_new)
             label = "TRUE";
         else
             label = "FALSE";
     }
 
-    if(!(tofbb->startIndex() > fromfbb->startIndex()))
+    if(!(tofbb->startItem() > fromfbb->startItem()))
         label += !label.empty() ? " (LOOP)" : "LOOP";
 
     return label;
@@ -233,24 +234,22 @@ REDasm::String DisassemblerGraphView::getEdgeLabel(const REDasm::Edge& e) const
 GraphViewItem *DisassemblerGraphView::itemFromCurrentLine() const
 {
     const REDasm::ListingCursor* cursor = m_disassembler->document()->cursor();
-    const REDasm::ListingItem* item = m_disassembler->document()->currentItem();
+    REDasm::ListingItem* item = m_disassembler->document()->currentItem();
 
     if(!item)
         return nullptr;
 
-    size_t line = cursor->currentLine();
-
     if(item->is(REDasm::ListingItemType::FunctionItem)) // Adjust to instruction
-        line = m_disassembler->document()->findInstruction(item->address());
+        item = m_disassembler->document()->instructionItem(item->address_new);
 
-    for(const auto& item : m_items)
+    for(const auto& gvi : m_items)
     {
-        DisassemblerBlockItem* dbi = static_cast<DisassemblerBlockItem*>(item);
+        DisassemblerBlockItem* dbi = static_cast<DisassemblerBlockItem*>(gvi);
 
-        if(!dbi->containsIndex(line))
+        if(!dbi->containsItem(item))
             continue;
 
-        return item;
+        return gvi;
     }
 
     return nullptr;
