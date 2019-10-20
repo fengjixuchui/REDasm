@@ -1,6 +1,7 @@
 #include "disassemblerviewdocks.h"
 #include <QHeaderView>
 #include <QApplication>
+#include <redasm/context.h>
 
 DisassemblerViewDocks::DisassemblerViewDocks(QObject *parent) : QObject(parent), m_disassembler(nullptr)
 {
@@ -26,17 +27,10 @@ void DisassemblerViewDocks::setDisassembler(const REDasm::DisassemblerPtr& disas
         m_functionsview->resizeColumnToContents(0);
     });
 
-    if(m_functionsmodel)
-        m_functionsmodel->setDisassembler(disassembler);
-
-    if(m_calltreemodel)
-        m_calltreemodel->setDisassembler(disassembler);
-
-    if(m_referencesmodel)
-        m_referencesmodel->setDisassembler(disassembler);
-
-    if(m_listingmap)
-        m_listingmap->setDisassembler(disassembler);
+    if(m_functionsmodel) m_functionsmodel->setDisassembler(disassembler);
+    if(m_calltreemodel) m_calltreemodel->setDisassembler(disassembler);
+    if(m_referencesmodel) m_referencesmodel->setDisassembler(disassembler);
+    if(m_listingmap) m_listingmap->setDisassembler(disassembler);
 }
 
 ListingFilterModel *DisassemblerViewDocks::functionsModel() const { return m_functionsmodel; }
@@ -60,19 +54,19 @@ void DisassemblerViewDocks::updateCallGraph()
 {
     REDasm::ListingDocument& document = m_disassembler->document();
 
-    if(m_disassembler->busy() || m_calltreeview->visibleRegion().isEmpty() || !document->currentItem())
+    if(r_disasm->busy() || m_calltreeview->visibleRegion().isEmpty() || !r_docnew->currentItem().isValid())
         return;
 
-    const REDasm::ListingItem* item = document->functionStart(document->currentItem()->address_new);
+    // const REDasm::ListingItem* item = document->functionStart(document->currentItem()->address_new);
 
-    if(!item)
-    {
-        m_calltreemodel->clearGraph();
-        return;
-    }
+    // if(!item)
+    // {
+    //     m_calltreemodel->clearGraph();
+    //     return;
+    // }
 
-    m_calltreemodel->initializeGraph(item->address_new);
-    m_calltreeview->expandToDepth(0);
+    // m_calltreemodel->initializeGraph(item->address_new);
+    // m_calltreeview->expandToDepth(0);
 }
 
 QDockWidget *DisassemblerViewDocks::findDock(const QString &objectname) const
