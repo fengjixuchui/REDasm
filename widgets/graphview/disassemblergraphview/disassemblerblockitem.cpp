@@ -6,9 +6,9 @@
 #include <QPainter>
 #include <cmath>
 
-#define BLOCK_MARGIN 4
+#define BLOCK_MARGIN      4
 #define DROP_SHADOW_SIZE  10
-#define BLOCK_MARGINS -BLOCK_MARGIN, 0, BLOCK_MARGIN, BLOCK_MARGIN
+#define BLOCK_MARGINS     -BLOCK_MARGIN, 0, BLOCK_MARGIN, BLOCK_MARGIN
 
 DisassemblerBlockItem::DisassemblerBlockItem(const REDasm::FunctionBasicBlock *fbb, const REDasm::DisassemblerPtr &disassembler, REDasm::Node node, QWidget *parent) : GraphViewItem(node, parent), m_basicblock(fbb), m_disassembler(disassembler)
 {
@@ -30,7 +30,7 @@ DisassemblerBlockItem::DisassemblerBlockItem(const REDasm::FunctionBasicBlock *f
     });
 }
 
-DisassemblerBlockItem::~DisassemblerBlockItem() { m_disassembler->document()->cursor()->positionChanged.disconnect(this); }
+DisassemblerBlockItem::~DisassemblerBlockItem() { r_docnew->cursor().positionChanged.disconnect(this); }
 REDasm::String DisassemblerBlockItem::currentWord() { return m_renderer->getCurrentWord(); }
 ListingDocumentRenderer *DisassemblerBlockItem::renderer() const { return m_renderer.get(); }
 bool DisassemblerBlockItem::containsItem(const REDasm::ListingItem& item) const { return m_basicblock->contains(item.address_new); }
