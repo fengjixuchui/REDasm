@@ -20,11 +20,8 @@ void DisassemblerViewDocks::setDisassembler(const REDasm::DisassemblerPtr& disas
 {
     m_disassembler = disassembler;
 
-    m_disassembler->busyChanged.connect(this, [&](REDasm::EventArgs*) {
-        if(m_disassembler->busy())
-            return;
-
-        m_functionsview->resizeColumnToContents(0);
+    r_evt::subscribe(REDasm::StandardEvents::Disassembler_BusyChanged, this, [&](const REDasm::EventArgs*) {
+        if(!r_disasm->busy()) m_functionsview->resizeColumnToContents(0);
     });
 
     if(m_functionsmodel) m_functionsmodel->setDisassembler(disassembler);
@@ -52,21 +49,12 @@ void DisassemblerViewDocks::initializeCallGraph(address_t address)
 
 void DisassemblerViewDocks::updateCallGraph()
 {
-    REDasm::ListingDocument& document = m_disassembler->document();
-
-    if(r_disasm->busy() || m_calltreeview->visibleRegion().isEmpty() || !r_docnew->currentItem().isValid())
+    if(r_disasm->busy() || m_calltreeview->visibleRegion().isEmpty() || !r_doc->currentItem().isValid())
         return;
 
-    // const REDasm::ListingItem* item = document->functionStart(document->currentItem()->address_new);
-
-    // if(!item)
-    // {
-    //     m_calltreemodel->clearGraph();
-    //     return;
-    // }
-
-    // m_calltreemodel->initializeGraph(item->address_new);
-    // m_calltreeview->expandToDepth(0);
+    REDasm::ListingItem item = r_doc->functionStart(r_doc->currentItem().address);
+    m_calltreemodel->initializeGraph(item.address);
+    m_calltreeview->expandToDepth(0);
 }
 
 QDockWidget *DisassemblerViewDocks::findDock(const QString &objectname) const

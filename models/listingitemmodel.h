@@ -2,8 +2,7 @@
 
 #include <QList>
 #include "disassemblermodel.h"
-#include <redasm/disassembler/listing/listingdocument.h>
-#include <redasm/disassembler/listing/listingdocumentnew.h>
+#include <redasm/disassembler/listing/document/listingdocument.h>
 #include <redasm/disassembler/listing/backend/listingitems.h>
 
 class ListingItemModel : public DisassemblerModel
@@ -12,6 +11,7 @@ class ListingItemModel : public DisassemblerModel
 
     public:
         explicit ListingItemModel(REDasm::ListingItemType itemtype, QObject *parent = nullptr);
+        ~ListingItemModel();
         void setDisassembler(const REDasm::DisassemblerPtr &disassembler) override;
         REDasm::ListingItem item(const QModelIndex& index) const;
         address_location address(const QModelIndex& index) const;
@@ -27,7 +27,7 @@ class ListingItemModel : public DisassemblerModel
         virtual bool isItemAllowed(const REDasm::ListingItem& item) const;
 
     private:
-        void onListingChanged(REDasm::EventArgs* e);
+        void onListingChanged(const REDasm::EventArgs* e);
 
     private:
         REDasm::SortedList m_items;

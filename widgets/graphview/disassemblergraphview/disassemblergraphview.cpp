@@ -26,8 +26,7 @@ DisassemblerGraphView::DisassemblerGraphView(QWidget *parent): GraphView(parent)
 
 DisassemblerGraphView::~DisassemblerGraphView()
 {
-    m_disassembler->document()->cursor()->positionChanged.disconnect(this);
-
+    r_evt::ungroup(this);
     this->killTimer(m_blinktimer);
     m_blinktimer = -1;
 }
@@ -36,14 +35,10 @@ void DisassemblerGraphView::setDisassembler(const REDasm::DisassemblerPtr &disas
 {
     GraphView::setDisassembler(disassembler);
 
-    m_disassembler->document()->cursor()->positionChanged.connect(this, [&](REDasm::EventArgs*) {
-        if(!this->isVisible())
-            return;
-
+    r_evt::subscribe(REDasm::StandardEvents::Cursor_PositionChanged, this, [&](const REDasm::EventArgs*) {
+        if(!this->isVisible()) return;
         this->renderGraph();
-
-        if(!this->hasFocus())
-            this->focusCurrentBlock();
+        if(!this->hasFocus()) this->focusCurrentBlock();
     });
 }
 
@@ -105,8 +100,7 @@ void DisassemblerGraphView::onMenuRequested()
 
 void DisassemblerGraphView::goTo(address_t address)
 {
-    auto& document = m_disassembler->document();
-    document->cursor()->moveTo(document->instructionIndex(address));
+    r_doc->cursor().moveTo(r_doc->itemInstructionIndex(address));
     this->renderGraph();
 }
 
@@ -121,19 +115,19 @@ void DisassemblerGraphView::focusCurrentBlock()
 
 bool DisassemblerGraphView::renderGraph()
 {
-    REDasm::ListingItem currentfunction = r_docnew->functionStart(r_docnew->currentItem().address_new);
+    REDasm::ListingItem currentfunction = r_doc->functionStart(r_doc->currentItem().address);
     if(!currentfunction.isValid()) return false;
 
-    if(currentfunction.address_new == m_currentfunction.address_new) // Don't render graph again
+    if(currentfunction.address == m_currentfunction.address) // Don't render graph again
         return true;
 
     m_currentfunction = currentfunction;
-    auto* graph = r_docnew->graph(currentfunction.address_new);
+    auto* graph = r_doc->graph(currentfunction.address);
 
     if(!graph)
     {
         m_currentfunction = { };
-        r_ctx->log("Graph creation failed @ " + REDasm::String::hex(currentfunction.address_new));
+        r_ctx->log("Graph creation failed @ " + REDasm::String::hex(currentfunction.address));
         return false;
     }
 
@@ -143,11 +137,8 @@ bool DisassemblerGraphView::renderGraph()
 
 void DisassemblerGraphView::mouseReleaseEvent(QMouseEvent *e)
 {
-    if(e->buttons() == Qt::BackButton)
-        m_disassembler->document()->cursor()->goBack();
-    else if(e->buttons() == Qt::ForwardButton)
-        m_disassembler->document()->cursor()->goForward();
-
+    if(e->buttons() == Qt::BackButton) r_doc->cursor().goBack();
+    else if(e->buttons() == Qt::ForwardButton) r_doc->cursor().goForward();
     GraphView::mouseReleaseEvent(e);
 }
 
@@ -171,13 +162,10 @@ void DisassemblerGraphView::timerEvent(QTimerEvent *e)
     {
         GraphViewItem* item = this->selectedItem();
 
-        if(!this->viewport()->hasFocus() || !item)
-            m_disassembler->document()->cursor()->disable();
-        else
-            m_disassembler->document()->cursor()->toggle();
+        if(!this->viewport()->hasFocus() || !item) r_doc->cursor().disable();
+        else r_doc->cursor().toggle();
 
-        if(item)
-            item->invalidate();
+        if(item) item->invalidate();
     }
 
     GraphView::timerEvent(e);
@@ -205,20 +193,19 @@ REDasm::String DisassemblerGraphView::getEdgeLabel(const REDasm::Edge& e) const
 {
     const REDasm::FunctionBasicBlock* fromfbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.source));
     const REDasm::FunctionBasicBlock* tofbb = variant_object<REDasm::FunctionBasicBlock>(this->graph()->data(e.target));
-    REDasm::ListingDocument& document = m_disassembler->document();
     const REDasm::ListingItem& fromitem = fromfbb->endItem();
-    REDasm::CachedInstruction instruction = document->instruction(fromitem.address_new);
+    REDasm::CachedInstruction instruction = r_doc->instruction(fromitem.address);
     REDasm::String label;
 
-    if(instruction && instruction->is(REDasm::InstructionType::Conditional))
+    if(instruction && instruction->isConditional())
     {
         const REDasm::ListingItem& toitem = tofbb->startItem();
 
-        if(r_disasm->getTarget(instruction->address) == toitem.address_new) label = "TRUE";
+        if(r_disasm->getTarget(instruction->address) == toitem.address) label = "TRUE";
         else label = "FALSE";
     }
 
-    if(!(tofbb->startItem().address_new > fromfbb->startItem().address_new))
+    if(!(tofbb->startItem().address > fromfbb->startItem().address))
         label += !label.empty() ? " (LOOP)" : "LOOP";
 
     return label;
@@ -226,11 +213,11 @@ REDasm::String DisassemblerGraphView::getEdgeLabel(const REDasm::Edge& e) const
 
 GraphViewItem *DisassemblerGraphView::itemFromCurrentLine() const
 {
-    REDasm::ListingItem item = r_docnew->currentItem();
+    REDasm::ListingItem item = r_doc->currentItem();
     if(!item.isValid()) return nullptr;
 
     if(item.is(REDasm::ListingItemType::FunctionItem)) // Adjust to instruction
-        item = r_docnew->itemInstruction(item.address_new);
+        item = r_doc->itemInstruction(item.address);
 
     for(const auto& gvi : m_items)
     {
@@ -244,7 +231,7 @@ GraphViewItem *DisassemblerGraphView::itemFromCurrentLine() const
 
 void DisassemblerGraphView::mousePressEvent(QMouseEvent *e)
 {
-    r_docnew->cursor().disable();
+    r_doc->cursor().disable();
     GraphView::mousePressEvent(e);
 }
 
@@ -252,5 +239,5 @@ void DisassemblerGraphView::mouseMoveEvent(QMouseEvent *e)
 {
     GraphView::mouseMoveEvent(e);
     GraphViewItem* item = this->selectedItem();
-    if(item) r_docnew->cursor().enable();
+    if(item) r_doc->cursor().enable();
 }

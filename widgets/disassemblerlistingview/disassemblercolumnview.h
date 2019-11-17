@@ -1,19 +1,17 @@
-#ifndef DISASSEMBLERCOLUMNVIEW_H
-#define DISASSEMBLERCOLUMNVIEW_H
+#pragma once
 
+#include <redasm/disassembler/disassembler.h>
 #include <QWidget>
 #include <QList>
 #include <QPair>
 #include <QSet>
-#include <redasm/disassembler/disassembler.h>
-#include <redasm/disassembler/listing/listingdocument.h>
 
 class DisassemblerColumnView : public QWidget
 {
     Q_OBJECT
 
     private:
-        struct ArrowPath{ u64 startidx, endidx; QColor color; };
+        struct ArrowPath{ size_t startidx, endidx; QColor color; };
 
     public:
         explicit DisassemblerColumnView(QWidget *parent = nullptr);
@@ -26,13 +24,11 @@ class DisassemblerColumnView : public QWidget
     private:
         bool isPathSelected(const ArrowPath& path) const;
         void fillArrow(QPainter* painter, int y, const QFontMetrics &fm);
-        void insertPath(REDasm::ListingItem *fromitem, u64 fromidx, u64 toidx);
+        void insertPath(const REDasm::ListingItem& fromitem, size_t fromidx, size_t toidx);
 
     private:
         REDasm::DisassemblerPtr m_disassembler;
         QList<ArrowPath> m_paths;
-        QSet< QPair<u64, u64> > m_done;
-        u64 m_first, m_last;
+        QSet<QPair<size_t, size_t>> m_done;
+        size_t m_first{REDasm::npos}, m_last{REDasm::npos};
 };
-
-#endif // DISASSEMBLERCOLUMNVIEW_H

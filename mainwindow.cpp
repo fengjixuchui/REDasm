@@ -41,6 +41,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ctxsettings.pluginPaths.push_back(REDasm::Path::create(Convert::to_rstring(searchpaths), PLUGINS_FOLDER_NAME));
 
     REDasm::Context::init(ctxsettings);
+    //r_ctx->sync(true);
     this->setViewWidgetsVisible(false);
     ui->leFilter->setVisible(false);
 
@@ -53,12 +54,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_lblprogress->setVisible(false);
     m_lblprogress->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    m_pbstatus = new QPushButton(this);
-    m_pbstatus->setFlat(true);
-    m_pbstatus->setFixedWidth(ui->statusBar->height() * 0.8);
-    m_pbstatus->setFixedHeight(ui->statusBar->height() * 0.8);
-    m_pbstatus->setText(QString::fromWCharArray(L"\u25cf"));
-    m_pbstatus->setVisible(false);
+    m_lblstatusicon = new QLabel(this);
+    m_lblstatusicon->setFixedWidth(ui->statusBar->height() * 0.8);
+    m_lblstatusicon->setFixedHeight(ui->statusBar->height() * 0.8);
+    m_lblstatusicon->setText(QString::fromWCharArray(L"\u25cf"));
+    m_lblstatusicon->setVisible(false);
 
     m_pbproblems = new QPushButton(this);
     m_pbproblems->setFlat(true);
@@ -68,7 +68,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->statusBar->addPermanentWidget(m_lblstatus, 70);
     ui->statusBar->addPermanentWidget(m_lblprogress, 30);
     ui->statusBar->addPermanentWidget(m_pbproblems);
-    ui->statusBar->addPermanentWidget(m_pbstatus);
+    ui->statusBar->addPermanentWidget(m_lblstatusicon);
 
     this->setAcceptDrops(true);
     this->loadWindowState();
@@ -87,13 +87,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->action_Blocks, &QAction::triggered, this, &MainWindow::onBlocksClicked);
     connect(ui->action_About_REDasm, &QAction::triggered, this, &MainWindow::onAboutClicked);
 
-    connect(ui->action_Step, &QAction::triggered, this, [&]() {
-        if(!r_disasm) return;
-
-        r_disasm->resume();
-        this->checkDisassemblerStatus();
-    });
-
     connect(ui->action_Report_Bug, &QAction::triggered, this, []() {
         QDesktopServices::openUrl(QUrl("https://github.com/REDasmOrg/REDasm/issues"));
     });
@@ -102,7 +95,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         QDesktopServices::openUrl(QUrl("https://www.reddit.com/r/REDasm"));
     });
 
-    connect(m_pbstatus, &QPushButton::clicked, this, &MainWindow::changeDisassemblerStatus);
     connect(m_pbproblems, &QPushButton::clicked, this, &MainWindow::showProblems);
 
     qApp->installEventFilter(this);
@@ -205,14 +197,10 @@ void MainWindow::onSaveClicked()
 void MainWindow::onSaveAsClicked() // TODO: Handle multiple outputs
 {
     QString s = QFileDialog::getSaveFileName(this, "Save As...", m_fileinfo.fileName(), "REDasm Database (*.rdb)");
-
-    if(s.isEmpty())
-        return;
+    if(s.isEmpty()) return;
 
     DisassemblerView* currdv = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
-
-    if(!currdv)
-        return;
+    if(!currdv) return;
 
     if(!REDasm::Database::save(currdv->disassembler(), Convert::to_rstring(s), Convert::to_rstring(m_fileinfo.fileName())))
         r_ctx->log(REDasm::Database::lastError());
@@ -255,6 +243,7 @@ void MainWindow::onSettingsClicked()
 
 void MainWindow::onBlocksClicked()
 {
+    if(!this->currentDisassemblerView()) return;
     static TableDialog* td = nullptr;
 
     if(!td)
@@ -384,23 +373,21 @@ void MainWindow::initShortcuts()
 {
     auto actions = ui->menu_Development->actions();
 
-    for(int i = 2; i < actions.size(); i++)
-        actions[i]->setShortcut(QKeySequence(QString("CTRL+SHIFT+F%1").arg(i - 1)));
+    for(int i = 1; i < actions.size(); i++)
+        actions[i]->setShortcut(QKeySequence(QString("CTRL+SHIFT+F%1").arg(i)));
 }
 
 void MainWindow::setStandardActionsEnabled(bool b)
 {
-    bool step = r_ctx->hasFlag(REDasm::ContextFlags::StepDisassembly);
-
-    ui->action_Save->setEnabled(step || b);
-    ui->action_Save_As->setEnabled(step || b);
-    ui->action_Signatures->setEnabled(step || b);
-    ui->menu_Development->setEnabled(step || b);
+    ui->action_Save->setEnabled(b);
+    ui->action_Save_As->setEnabled(b);
+    ui->action_Signatures->setEnabled(b);
+    ui->menu_Development->setEnabled(this->currentDisassemblerView() || b);
 }
 
 void MainWindow::showDisassemblerView(REDasm::Disassembler *disassembler)
 {
-    disassembler->busyChanged.connect(this, [&](REDasm::EventArgs*) {
+    r_evt::subscribe(REDasm::StandardEvents::Disassembler_BusyChanged, this, [&](const REDasm::EventArgs*) {
         QMetaObject::invokeMethod(this, "checkDisassemblerStatus", Qt::QueuedConnection);
     });
 
@@ -448,7 +435,7 @@ void MainWindow::closeFile()
     // TODO: messageBox for confirmation?
     if(disassembler)
     {
-        disassembler->busyChanged.disconnect();
+        r_evt::unsubscribe();
         disassembler->stop();
     }
 
@@ -465,7 +452,7 @@ void MainWindow::closeFile()
     ui->pteOutput->clear();
     m_lblstatus->clear();
     m_lblprogress->setVisible(false);
-    m_pbstatus->setVisible(false);
+    m_lblstatusicon->setVisible(false);
     m_pbproblems->setVisible(false);
     this->setStandardActionsEnabled(false);
     this->setViewWidgetsVisible(false);
@@ -476,8 +463,6 @@ void MainWindow::selectLoader(const REDasm::LoadRequest& request)
 {
     LoaderDialog dlgloader(request, this);
     if(dlgloader.exec() != LoaderDialog::Accepted) return;
-
-    ui->action_Step->setEnabled(r_ctx->hasFlag(REDasm::ContextFlags::StepDisassembly));
 
     const REDasm::PluginInstance *assemblerpi = nullptr, *loaderpi = dlgloader.selectedLoader();
     REDasm::Loader* loader = plugin_cast<REDasm::Loader>(loaderpi);
@@ -508,11 +493,8 @@ void MainWindow::selectLoader(const REDasm::LoadRequest& request)
 
     REDasm::Disassembler* disassembler = new REDasm::Disassembler(assembler, loader);
 
-    disassembler->busyChanged.connect(this, [&](REDasm::EventArgs*) {
-        DisassemblerView* currdv = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
-
-        if(currdv)
-            QMetaObject::invokeMethod(m_lblprogress, "setVisible", Qt::QueuedConnection, Q_ARG(bool, currdv->disassembler()->busy()));
+    r_evt::subscribe(REDasm::StandardEvents::Disassembler_BusyChanged, this, [&](const REDasm::EventArgs*) {
+        QMetaObject::invokeMethod(m_lblprogress, "setVisible", Qt::QueuedConnection, Q_ARG(bool, r_disasm->busy()));
     });
 
     this->showDisassemblerView(disassembler); // Take ownership
@@ -545,58 +527,33 @@ void MainWindow::onAboutClicked()
     dlgabout.exec();
 }
 
-void MainWindow::changeDisassemblerStatus()
-{
-    REDasm::Disassembler* disassembler = this->currentDisassembler();
-    if(!disassembler) return;
-
-    if(disassembler->state() == REDasm::JobState::ActiveState) disassembler->pause();
-    else if(disassembler->state() == REDasm::JobState::PausedState) disassembler->resume();
-}
-
 void MainWindow::checkDisassemblerStatus()
 {
-    REDasm::Disassembler* disassembler = this->currentDisassembler();
-
-    if(!disassembler)
+    if(!r_disasm)
     {
         ui->action_Close->setEnabled(false);
-        m_pbstatus->setVisible(false);
+        m_lblstatusicon->setVisible(false);
         m_pbproblems->setVisible(false);
         return;
     }
 
-    switch(disassembler->state())
+    if(r_disasm->busy())
     {
-        case REDasm::JobState::ActiveState:
-            this->setWindowTitle(QString("%1 (Working)").arg(m_fileinfo.fileName()));
-            break;
-
-        case REDasm::JobState::PausedState:
-            this->setWindowTitle(QString("%1 (Paused)").arg(m_fileinfo.fileName()));
-            break;
-
-        default:
-            this->setWindowTitle(m_fileinfo.fileName());
-            break;
+        this->setWindowTitle(QString("%1 (Working)").arg(m_fileinfo.fileName()));
+        m_lblstatusicon->setStyleSheet("color: red;");
+    }
+    else
+    {
+        this->setWindowTitle(m_fileinfo.fileName());
+        m_lblstatusicon->setStyleSheet("color: green;");
     }
 
-    REDasm::JobState state = disassembler->state();
-
-    if(state == REDasm::JobState::ActiveState) m_pbstatus->setStyleSheet("color: red;");
-    else if(state == REDasm::JobState::PausedState) m_pbstatus->setStyleSheet("color: goldenrod;");
-    else m_pbstatus->setStyleSheet("color: green;");
-
-    m_pbstatus->setVisible(true);
-    m_lblprogress->setVisible(disassembler->busy());
+    m_lblstatusicon->setVisible(true);
+    m_lblprogress->setVisible(r_disasm->busy());
     m_pbproblems->setText(QString::number(r_ctx->problemsCount()) + " problem(s)");
+    m_pbproblems->setVisible(!r_disasm->busy() && r_ctx->hasProblems());
 
-    if(r_ctx->hasFlag(REDasm::ContextFlags::StepDisassembly))
-        m_pbproblems->setVisible(true);
-    else
-        m_pbproblems->setVisible(!disassembler->busy() && r_ctx->hasProblems());
-
-    this->setStandardActionsEnabled(!disassembler->busy());
+    this->setStandardActionsEnabled(!r_disasm->busy());
     ui->action_Close->setEnabled(true);
 }
 

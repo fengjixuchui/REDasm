@@ -3,7 +3,6 @@
 #include "../../../redasmsettings.h"
 #include "../logsyntaxhighlighter.h"
 #include "../convert.h"
-#include <redasm/disassembler/listing/listingdocument.h>
 #include <redasm/support/utils.h>
 
 #define ITEM_TYPE(x)  #x
@@ -39,35 +38,34 @@ ItemInformationDialog &ItemInformationDialog::string(const QString &k, const QSt
 
 QString ItemInformationDialog::itemType(const REDasm::ListingItem *item) const
 {
-    if(item->type_new == REDasm::ListingItemType::SegmentItem)
+    if(item->type == REDasm::ListingItemType::SegmentItem)
         return ITEM_TYPE(REDasm::ListingItem::SegmentItem);
-    if(item->type_new == REDasm::ListingItemType::EmptyItem)
+    if(item->type == REDasm::ListingItemType::EmptyItem)
         return ITEM_TYPE(REDasm::ListingItem::EmptyItem);
-    if(item->type_new == REDasm::ListingItemType::FunctionItem)
+    if(item->type == REDasm::ListingItemType::FunctionItem)
         return ITEM_TYPE(REDasm::ListingItem::FunctionItem);
-    if(item->type_new == REDasm::ListingItemType::TypeItem)
+    if(item->type == REDasm::ListingItemType::TypeItem)
         return ITEM_TYPE(REDasm::ListingItem::TypeItem);
-    if(item->type_new == REDasm::ListingItemType::SymbolItem)
+    if(item->type == REDasm::ListingItemType::SymbolItem)
         return ITEM_TYPE(REDasm::ListingItem::SymbolItem);
-    if(item->type_new == REDasm::ListingItemType::MetaItem)
+    if(item->type == REDasm::ListingItemType::MetaItem)
         return ITEM_TYPE(REDasm::ListingItem::MetaItem);
-    if(item->type_new == REDasm::ListingItemType::InstructionItem)
+    if(item->type == REDasm::ListingItemType::InstructionItem)
         return ITEM_TYPE(REDasm::ListingItem::InstructionItem);
 
-    return QString::number(static_cast<size_t>(item->type_new));
+    return QString::number(static_cast<size_t>(item->type));
 }
 
 void ItemInformationDialog::displayInformation()
 {
-    const auto& document = m_disassembler->document();
-    const REDasm::ListingItem* item = document->currentItem();
+    // const REDasm::ListingItem& item = r_docnew->currentItem();
 
-    this->line("document_index", QString::number(document->itemIndex(item)));
-    this->line("address", Convert::to_qstring(REDasm::String::hex(item->address_new)));
-    this->line("type", this->itemType(item));
-    this->line("index", QString::number(item->index_new));
+    // this->line("document_index", QString::number(document->itemIndex(item)));
+    // this->line("address", Convert::to_qstring(REDasm::String::hex(item->address_new)));
+    // this->line("type", this->itemType(item));
+    // this->line("index", QString::number(item->index_new));
 
-    this->line().header("DATA");
+    // this->line().header("DATA");
 
     // this->array("comments", item->data->comments.begin(), item->data->comments.end(),
     //             [&](const std::string& s) -> QString { return QString::fromStdString(s); });

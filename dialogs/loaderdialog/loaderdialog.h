@@ -31,8 +31,8 @@ class LoaderDialog : public QDialog
         void syncAssembler();
         void populateAssemblers();
 
-    public slots:
-        void accept() override;
+    private slots:
+        void onAccepted();
 
     private:
         Ui::LoaderDialog *ui;
