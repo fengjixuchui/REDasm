@@ -1,8 +1,8 @@
 #include "graphviewitem.h"
-#include <QDebug>
 
-GraphViewItem::GraphViewItem(REDasm::Node node, QObject *parent): QObject(parent), m_node(node) { }
-REDasm::Node GraphViewItem::node() const { return m_node; }
+GraphViewItem::GraphViewItem(RDGraphNode node, const RDGraph* g, QObject *parent): QObject(parent), m_node(node), m_graph(g) { }
+const RDGraph* GraphViewItem::graph() const { return m_graph; }
+RDGraphNode GraphViewItem::node() const { return m_node; }
 int GraphViewItem::x() const { return this->position().x(); }
 int GraphViewItem::y() const { return this->position().y(); }
 int GraphViewItem::width() const { return this->size().width(); }
@@ -13,8 +13,8 @@ const QPoint &GraphViewItem::position() const { return m_pos; }
 void GraphViewItem::move(const QPoint &pos) { m_pos = pos; }
 void GraphViewItem::itemSelectionChanged(bool selected) { }
 QPoint GraphViewItem::mapToItem(const QPoint &p) const { return QPoint(p.x() - m_pos.x(), p.y() - m_pos.y()); }
-int GraphViewItem::currentLine() const { return 0; }
+int GraphViewItem::currentRow() const { return 0; }
 void GraphViewItem::mouseDoubleClickEvent(QMouseEvent *e) { }
-void GraphViewItem::mousePressEvent(QMouseEvent* e) { if(e->buttons() == Qt::RightButton) emit menuRequested();  }
+void GraphViewItem::mousePressEvent(QMouseEvent* e) { }
 void GraphViewItem::mouseMoveEvent(QMouseEvent *e) { }
 void GraphViewItem::invalidate(bool notify) { if(notify) emit invalidated(); }

@@ -4,7 +4,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRect>
-#include <redasm/graph/graph.h>
+#include <rdapi/graph/graph.h>
 
 class GraphViewItem: public QObject
 {
@@ -14,10 +14,10 @@ class GraphViewItem: public QObject
         enum: size_t { None = 0, Selected, Focused };
 
     public:
-        explicit GraphViewItem(REDasm::Node node, QObject* parent = nullptr);
+        explicit GraphViewItem(RDGraphNode node, const RDGraph* g, QObject* parent = nullptr);
         virtual ~GraphViewItem() = default;
-        virtual void invalidate(bool notify = true);
-        REDasm::Node node() const;
+        const RDGraph* graph() const;
+        RDGraphNode node() const;
         int x() const;
         int y() const;
         int width() const;
@@ -35,17 +35,20 @@ class GraphViewItem: public QObject
 
     public:
         QPoint mapToItem(const QPoint& p) const;
-        virtual int currentLine() const;
+        virtual int currentRow() const;
         virtual void render(QPainter* painter, size_t state) = 0;
         virtual QSize size() const = 0;
 
+    public slots:
+        virtual void invalidate(bool notify = true);
+
     signals:
         void invalidated();
-        void menuRequested();
 
     private:
         QPoint m_pos;
-        REDasm::Node m_node;
+        RDGraphNode m_node;
+        const RDGraph* m_graph;
 
     friend class GraphView;
 };

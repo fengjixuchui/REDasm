@@ -12,16 +12,15 @@ class ReferencesDialog : public QDialog
     Q_OBJECT
 
     public:
-        explicit ReferencesDialog(const REDasm::Symbol *symbol, QWidget *parent = nullptr);
+        explicit ReferencesDialog(const RDContextPtr& ctx, ISurface* surface, const RDSymbol *symbol, QWidget *parent = nullptr);
         ~ReferencesDialog();
-
-    signals:
-        void jumpTo(address_t address);
 
     private slots:
         void on_tvReferences_doubleClicked(const QModelIndex &index);
 
     private:
         Ui::ReferencesDialog *ui;
+        RDContextPtr m_context;
+        ISurface* m_surface;
         ReferencesModel* m_referencesmodel;
 };

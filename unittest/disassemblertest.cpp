@@ -1,9 +1,8 @@
 #include "disassemblertest.h"
-#include "../convert.h"
-#include <redasm/disassembler/disassembler.h>
-#include <redasm/plugins/assembler/assembler.h>
-#include <redasm/support/utils.h>
-#include <redasm/context.h>
+//#include <redasm/disassembler/disassembler.h>
+//#include <redasm/plugins/assembler/assembler.h>
+//#include <redasm/support/utils.h>
+//#include <redasm/context.h>
 #include <QStandardPaths>
 #include <QApplication>
 #include <iostream>
@@ -37,42 +36,38 @@
 #define ADD_TEST_PATH_NULL(t, cb)        m_tests[TEST_PATH(t)] = nullptr;
 
 using namespace std;
-using namespace REDasm;
 
-DisassemblerTest::DisassemblerTest(): m_buffer(nullptr)
+DisassemblerTest::DisassemblerTest()
 {
-    ADD_TEST("/home/davide/Programmazione/Cavia.exe", testCavia);
+    //ADD_TEST_PATH("PE Test/VB5CRKME.EXE", testVB5CrackMe);
+    //ADD_TEST_PATH("PE Test/OllyDump.dll", testOllyDump);
+    //ADD_TEST_PATH("PE Test/tn_11.exe", testTn11);
+    //ADD_TEST_PATH("PE Test/HelloWorldMFC.exe", testHelloWorldMFC);
+    //ADD_TEST_PATH("PE Test/TestRTTI.exe", testTestRTTI);
+    //ADD_TEST_PATH("IOLI-crackme/bin-pocketPC/crackme0x01.arm.exe", testIoliARM);
+    //ADD_TEST_PATH("ELF Test/helloworld32_stripped", testHw32Stripped);
+    //ADD_TEST_PATH("ELF Test/jmptable", testJmpTable);
+    //ADD_TEST_PATH("ELF Test/pwrctl_be", testPwrCtlBE);
 
-    ADD_TEST_PATH("PE Test/CM01.exe", testCM01);
-    ADD_TEST_PATH("PE Test/VB5CRKME.EXE", testVB5CrackMe);
-    ADD_TEST_PATH("PE Test/OllyDump.dll", testOllyDump);
-    ADD_TEST_PATH("PE Test/tn_11.exe", testTn11);
-    ADD_TEST_PATH("PE Test/tn12/scrack.exe", testSCrack);
-    ADD_TEST_PATH("PE Test/HelloWorldMFC.exe", testHelloWorldMFC);
-    ADD_TEST_PATH("PE Test/TestRTTI.exe", testTestRTTI);
-    ADD_TEST_PATH("IOLI-crackme/bin-pocketPC/crackme0x01.arm.exe", testIoliARM);
-    ADD_TEST_PATH("ELF Test/helloworld32_stripped", testHw32Stripped);
-    ADD_TEST_PATH("ELF Test/jmptable", testJmpTable);
-    ADD_TEST_PATH("ELF Test/pwrctl_be", testPwrCtlBE);
+    //ADD_TEST_PATH_NULL("PE Test/CorruptedIT.exe", nullptr);
 
-    ADD_TEST_PATH_NULL("PE Test/CorruptedIT.exe", nullptr);
-
-    ContextSettings ctxsettings;
-    ctxsettings.tempPath = qUtf8Printable(QStandardPaths::writableLocation(QStandardPaths::TempLocation));
-    ctxsettings.runtimePath = qUtf8Printable(QDir::currentPath());
-    ctxsettings.logCallback =[](const String&) { };
-    ctxsettings.ignoreproblems = true;
-    r_ctx->init(ctxsettings);
+    //ContextSettings ctxsettings;
+    //ctxsettings.tempPath = qUtf8Printable(QStandardPaths::writableLocation(QStandardPaths::TempLocation));
+    //ctxsettings.runtimePath = qUtf8Printable(QDir::currentPath());
+    //ctxsettings.logCallback =[](const String&) { };
+    //ctxsettings.ignoreproblems = true;
+    //r_ctx->init(ctxsettings);
 }
 
 DisassemblerTest::~DisassemblerTest() { }
 
 void DisassemblerTest::runTests()
 {
+    /*
     for(const TestItem& test : m_tests)
     {
         r_pm->unloadAll();
-        QString testpath = Convert::to_qstring(test.first);
+        QString testpath; // = Convert::to_qstring(test.first);
         QFileInfo fi(testpath);
 
         if(!fi.exists())
@@ -93,6 +88,7 @@ void DisassemblerTest::runTests()
         this->runCurrentTest(test.first, test.second);
         cout << REPEATED('-') << REPEATED('-') << REPEATED('-') << endl << endl;
     }
+    */
 }
 
 string DisassemblerTest::replaceAll(std::string str, const std::string &from, const std::string &to)
@@ -111,90 +107,61 @@ string DisassemblerTest::replaceAll(std::string str, const std::string &from, co
     return str;
 }
 
-void DisassemblerTest::runCurrentTest(const String& filepath, const TestCallback &cb)
-{
-    LoadRequest request(filepath, m_buffer);
-    REDasm::PluginList loaders = r_pm->getLoaders(request); //, true);
-    TEST("Loader", !loaders.empty());
+//void DisassemblerTest::runCurrentTest(const String& filepath, const TestCallback &cb)
+//{
+    // LoadRequest request(filepath, m_buffer);
+    // REDasm::PluginList loaders = r_pm->getLoaders(request); //, true);
+    // TEST("Loader", !loaders.empty());
 
-    if(loaders.empty())
-        return;
+    // if(loaders.empty())
+    //     return;
 
-    const PluginInstance *assemblerpi = nullptr, *loaderpi = loaders.first();
-    REDasm::Loader* loader = plugin_cast<REDasm::Loader>(loaderpi);
-    loader->init(request);
+    // const PluginInstance *assemblerpi = nullptr, *loaderpi = loaders.first();
+    // REDasm::Loader* loader = plugin_cast<REDasm::Loader>(loaderpi);
+    // loader->init(request);
 
-    assemblerpi = r_pm->findAssembler(loader->assembler().id);
-    TEST("Assembler", assemblerpi);
+    // assemblerpi = r_pm->findAssembler(loader->assembler().id);
+    // TEST("Assembler", assemblerpi);
 
-    if(!assemblerpi)
-        return;
+    // if(!assemblerpi)
+    //     return;
 
-    REDasm::Assembler* assembler = plugin_cast<REDasm::Assembler>(assemblerpi);
-    assembler->init(loader->assembler());
+    // REDasm::Assembler* assembler = plugin_cast<REDasm::Assembler>(assemblerpi);
+    // assembler->init(loader->assembler());
 
-    m_disassembler = std::make_unique<Disassembler>(assembler, loader);
-    m_document = m_disassembler->document();
+    // m_disassembler = std::make_unique<Disassembler>(assembler, loader);
+    // m_document = m_disassembler->document();
 
-    cout << "->> Disassembler...";
-    m_disassembler->disassemble();
-    cout << TEST_OK << endl;
+    // cout << "->> Disassembler...";
+    // m_disassembler->disassemble();
+    // cout << TEST_OK << endl;
 
-    if(cb)
-        cb();
-}
+    // if(cb)
+    //     cb();
+//}
 
-void DisassemblerTest::testTrampolines(const std::map<address_t, String> &trampolines)
-{
-    for(auto& trampoline : trampolines)
-    {
-        const Symbol* symbol = m_document->symbol(trampoline.first);
-        TEST_SYMBOL_NAME(("Trampoline " + trampoline.second + " @  " + String::hex(trampoline.first)).c_str(), symbol, symbol->isFunction(), trampoline.second);
-    }
-}
+//void DisassemblerTest::testTrampolines(const std::map<address_t, String> &trampolines)
+//{
+    //for(auto& trampoline : trampolines)
+    //{
+        //const Symbol* symbol = m_document->symbol(trampoline.first);
+        //TEST_SYMBOL_NAME(("Trampoline " + trampoline.second + " @  " + String::hex(trampoline.first)).c_str(), symbol, symbol->isFunction(), trampoline.second);
+    //}
+//}
 
-void DisassemblerTest::testVBEvents(const std::map<address_t, String> &vbevents)
-{
-    for(auto& vbevent : vbevents)
-    {
-        String procname = vbevent.second;
-        procname.replace("::", "_");
+//void DisassemblerTest::testVBEvents(const std::map<address_t, String> &vbevents)
+//{
+    //for(auto& vbevent : vbevents)
+    //{
+        //String procname = vbevent.second;
+        //procname.replace("::", "_");
 
-        const Symbol* symbol = m_document->symbol(vbevent.first);
-        TEST_SYMBOL_NAME(("Event " + vbevent.second + " @ " + String::hex(vbevent.first)).c_str(), symbol, symbol->isFunction(), procname);
-    }
-}
+        //const Symbol* symbol = m_document->symbol(vbevent.first);
+        //TEST_SYMBOL_NAME(("Event " + vbevent.second + " @ " + String::hex(vbevent.first)).c_str(), symbol, symbol->isFunction(), procname);
+    //}
+//}
 
-void DisassemblerTest::testCavia()
-{
-    const Symbol* symbol = m_document->symbol(0x00401000);
-    TEST_SYMBOL("EntryPoint", symbol, symbol->isFunction());
-
-    symbol = m_document->symbol(0x00401029);
-    TEST_SYMBOL_NAME("WndProc", symbol, symbol->isFunction(), "DlgProc_401029");
-}
-
-void DisassemblerTest::testCM01()
-{
-    // const Symbol* symbol = m_document->symbol(0x00401128);
-    // TEST_SYMBOL_NAME("Exported WndProc", symbol, symbol->isFunction() && symbol->is(SymbolType::ExportFunction), "WndProc");
-
-    // symbol = m_document->symbol(0x00401253);
-    // TEST_SYMBOL_NAME("DlgProc @ 00401253", symbol, symbol->isFunction(), "DlgProc_401253");
-
-    // symbol = m_document->symbol(0x0040130A);
-    // TEST_SYMBOL_NAME("DlgProc @ 0040130A", symbol, symbol->isFunction(), "DlgProc_40130A");
-
-    // symbol = m_document->symbol(0x004020E7);
-    // TEST_SYMBOL("Ascii String @ 004020E7", symbol, symbol->is(SymbolType::String));
-
-    // symbol = m_document->symbol(0x00402129);
-    // TEST_SYMBOL("Ascii String @ 00402129", symbol, symbol->is(SymbolType::String));
-
-    // symbol = m_document->symbol(0x00402134);
-    // TEST_SYMBOL("Ascii String @ 00402134", symbol, symbol->is(SymbolType::String));
-}
-
+/*
 void DisassemblerTest::testOllyDump()
 {
     // const Symbol* symbol = m_document->symbol(0x00403BDC);
@@ -206,10 +173,10 @@ void DisassemblerTest::testOllyDump()
     // if(!instruction)
     //     return;
 
-    // TEST("Validating CALL @ 0x00403BEA target", instruction->typeIs(InstructionType::Call) && m_disassembler->getTargetsCount(instruction->address));
+    // TEST("Validating CALL @ 0x00403BEA target", instruction->typeIs(Instruction::Call) && m_disassembler->getTargetsCount(instruction->address));
 
     // symbol = m_document->symbol(0x00407730);
-    // TEST_SYMBOL("Checking if target is pointer", symbol, symbol->is(SymbolType::Pointer));
+    // TEST_SYMBOL("Checking if target is pointer", symbol, symbol->is(Symbol::Pointer));
 
     // if(!symbol)
     //     return;
@@ -218,39 +185,10 @@ void DisassemblerTest::testOllyDump()
     // TEST_SYMBOL("Checking if dereferenced pointer is a function", symbol, symbol->isFunction());
 }
 
-void DisassemblerTest::testSCrack()
-{
-   //  const Symbol* symbol = m_document->symbol(0x004013E4);
-   //  TEST_SYMBOL_NAME("Import VB6 ThunRTMain", symbol, symbol->isFunction(), "_msvbvm60.dll_ThunRTMain");
-
-   //  symbol = m_document->symbol(0x00402B1C);
-   //  TEST_SYMBOL("Wide String @ 0x00402b1c", symbol, symbol->is(SymbolType::WideString));
-
-   //  symbol = m_document->symbol(0x00402B2C);
-   //  TEST_SYMBOL("Wide String @ 0x00402b2c", symbol, symbol->is(SymbolType::WideString));
-
-   //  std::map<address_t, String> vbevents;
-   //  vbevents[0x00403BB0] = "main::about::Click";
-   //  vbevents[0x00403D20] = "main::about::GotFocus";
-   //  vbevents[0x00403DE0] = "main::about::LostFocus";
-   //  vbevents[0x00403EA0] = "main::register::Click";
-   //  vbevents[0x00404970] = "main::register::GotFocus";
-   //  vbevents[0x00404A30] = "main::register::LostFocus";
-   //  vbevents[0x00404AF0] = "main::sn::GotFocus";
-   //  vbevents[0x00404BB0] = "main::sn::LostFocus";
-   //  vbevents[0x00404C70] = "main::uname::GotFocus";
-   //  vbevents[0x00404D30] = "main::uname::LostFocus";
-   //  vbevents[0x00404DF0] = "aboutfrm::ok::Click";
-   //  vbevents[0x00404EE0] = "aboutfrm::pmode::Click";
-   //  vbevents[0x00404FE0] = "aboutfrm::uic::Click";
-
-   //  this->testVBEvents(vbevents);
-}
-
 void DisassemblerTest::testVB5CrackMe()
 {
     // const Symbol* symbol = m_document->symbol(0x0040110E);
-    // TEST_SYMBOL_NAME("Import VB5 ThunRTMain", symbol, symbol->is(SymbolType::Function), "_msvbvm50.dll_ThunRTMain");
+    // TEST_SYMBOL_NAME("Import VB5 ThunRTMain", symbol, symbol->is(Symbol::Function), "_msvbvm50.dll_ThunRTMain");
 
     // std::map<address_t, String> trampolines;
     // trampolines[0x004010C0] = "_msvbvm50.dll___vbaExitProc";
@@ -267,16 +205,16 @@ void DisassemblerTest::testVB5CrackMe()
     // this->testTrampolines(trampolines);
 
     // symbol = m_document->symbol(0x00401EB8);
-    // TEST_SYMBOL("Wide String @ 0x00401EB8", symbol, symbol->is(SymbolType::WideString));
+    // TEST_SYMBOL("Wide String @ 0x00401EB8", symbol, symbol->is(Symbol::WideString));
 
     // symbol = m_document->symbol(0x00401EF8);
-    // TEST_SYMBOL("Wide String @ 0x00401EF8", symbol, symbol->is(SymbolType::WideString));
+    // TEST_SYMBOL("Wide String @ 0x00401EF8", symbol, symbol->is(Symbol::WideString));
 
     // symbol = m_document->symbol(0x00401F08);
-    // TEST_SYMBOL("Wide String @ 0x00401F08", symbol, symbol->is(SymbolType::WideString));
+    // TEST_SYMBOL("Wide String @ 0x00401F08", symbol, symbol->is(Symbol::WideString));
 
     // symbol = m_document->symbol(0x00401F44);
-    // TEST_SYMBOL("Wide String @ 0x00401F44", symbol, symbol->is(SymbolType::WideString));
+    // TEST_SYMBOL("Wide String @ 0x00401F44", symbol, symbol->is(Symbol::WideString));
 
     // std::map<address_t, String> vbevents;
     // vbevents[0x004020C4] = "Form1::Command1::Click";
@@ -295,13 +233,13 @@ void DisassemblerTest::testIoliARM()
     // TEST("Checking LDR's operands count", (instruction->mnemonic() == "ldr") && (instruction->operandscount >= 2));
 
     // Operand* op = instruction->op(1);
-    // TEST("Checking LDR's operand 2", REDasm::typeIs(op, OperandType::Memory));
+    // TEST("Checking LDR's operand 2", REDasm::typeIs(op, Operand::Memory));
 
     // const Symbol* symbol = m_document->symbol(op->u_value);
-    // TEST_SYMBOL("Checking LDR's operand 2 symbol", symbol, symbol->is(SymbolType::Data) && symbol->is(SymbolType::Pointer));
+    // TEST_SYMBOL("Checking LDR's operand 2 symbol", symbol, symbol->is(Symbol::Data) && symbol->is(Symbol::Pointer));
 
     // symbol = m_disassembler->dereferenceSymbol(symbol);
-    // TEST_SYMBOL("Checking LDR's operand 2 dereferenced string", symbol, symbol->is(SymbolType::String));
+    // TEST_SYMBOL("Checking LDR's operand 2 dereferenced string", symbol, symbol->is(Symbol::String));
 
     // instruction = m_document->instruction(0x00011088);
     // TEST("Checking LDR @ 0x00011088", instruction);
@@ -312,11 +250,11 @@ void DisassemblerTest::testIoliARM()
     // TEST("Checking LDR's operands count", (instruction->mnemonic() == "ldr") && (instruction->operandscount >= 2));
 
     // op = instruction->op(1);
-    // TEST("Checking LDR's operand 2", REDasm::typeIs(op, OperandType::Memory));
+    // TEST("Checking LDR's operand 2", REDasm::typeIs(op, Operand::Memory));
 
     // u64 value = 0;
     // symbol = m_document->symbol(op->u_value);
-    // TEST_SYMBOL("Checking LDR's operand 2 symbol", symbol, symbol->is(SymbolType::Data) && symbol->is(SymbolType::Pointer));
+    // TEST_SYMBOL("Checking LDR's operand 2 symbol", symbol, symbol->is(Symbol::Data) && symbol->is(Symbol::Pointer));
     // TEST("Checking dereferenced value", m_disassembler->dereference(symbol->address, &value) && (value == 0x149a));
 }
 
@@ -343,7 +281,7 @@ void DisassemblerTest::testTn11()
     // {
     //     address_t target = targets[i].toU64();
     //     const Symbol* symbol = m_document->symbol(target);
-    //     TEST(("Checking CASE #" + String::number(i) + " @ " + String::hex(target)).c_str(), symbol && symbol->is(SymbolType::Code) && m_document->instruction(target));
+    //     TEST(("Checking CASE #" + String::number(i) + " @ " + String::hex(target)).c_str(), symbol && symbol->is(Symbol::Code) && m_document->instruction(target));
     //     i++;
     // }
 }
@@ -387,7 +325,7 @@ void DisassemblerTest::testHelloWorldMFC()
     // for(const String& rttiobject : rttiobjects)
     // {
     //     const Symbol* symbol = m_document->symbol(rttiobject);
-    //     TEST_SYMBOL(("Checking " + rttiobject).c_str(), symbol, symbol->is(SymbolType::Pointer));
+    //     TEST_SYMBOL(("Checking " + rttiobject).c_str(), symbol, symbol->is(Symbol::Pointer));
     // }
 }
 
@@ -403,6 +341,7 @@ void DisassemblerTest::testTestRTTI()
     // for(const String& rttiobject : rttiobjects)
     // {
     //     const Symbol* symbol = m_document->symbol(rttiobject);
-    //     TEST_SYMBOL(("Checking " + rttiobject).c_str(), symbol, symbol->is(SymbolType::Pointer));
+    //     TEST_SYMBOL(("Checking " + rttiobject).c_str(), symbol, symbol->is(Symbol::Pointer));
     // }
 }
+*/

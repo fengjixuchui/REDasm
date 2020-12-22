@@ -5,6 +5,7 @@
 #include <QVariant>
 #include <QFile>
 #include <QDir>
+#include <cmath>
 #include "redasmsettings.h"
 
 #define THEME_UI_SET_COLOR(palette, key) if(m_theme.contains(#key)) palette.setColor(QPalette::key, m_theme[#key].toString())
@@ -16,46 +17,34 @@ QString ThemeProvider::theme(const QString &name) { return QString(":/themes/%1.
 
 bool ThemeProvider::isDarkTheme()
 {
-    if(!m_theme.contains("dark"))
-        return false;
+    QPalette p = qApp->palette();
+    QColor c = p.window().color();
 
-    return m_theme["dark"] == true;
+    double hsp = std::sqrt(0.299 * (c.red() * c.red()) +
+                           0.587 * (c.green() * c.green()) +
+                           0.114 * (c.blue() * c.blue()));
+
+    return hsp <= 127.5;
 }
 
 bool ThemeProvider::loadTheme(const QString& theme)
 {
-    if(!m_theme.isEmpty())
-        return true;
+    if(!m_theme.isEmpty()) return true;
 
     QFile f(QString(":/themes/%1.json").arg(theme.toLower()));
-
-    if(!f.open(QFile::ReadOnly))
-        return false;
+    if(!f.open(QFile::ReadOnly)) return false;
 
     QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
-
-    if(doc.isObject())
-        m_theme = doc.object();
-    else
-        return false;
+    if(doc.isObject()) m_theme = doc.object();
+    else return false;
 
     return true;
 }
 
-QColor ThemeProvider::themeValue(const QString &name)
+QColor ThemeProvider::themeValue(rd_type theme)
 {
-    if(m_theme.isEmpty())
-    {
-        REDasmSettings settings;
-
-        if(!ThemeProvider::loadTheme(settings.currentTheme()))
-            return QColor();
-    }
-
-    if(m_theme.contains(name))
-        return QColor(m_theme[name].toString());
-
-    return QColor();
+    auto* c = RDConfig_GetTheme(theme);
+    return c ? QColor(c) : QColor();
 }
 
 QIcon ThemeProvider::icon(const QString &name)
@@ -66,8 +55,8 @@ QIcon ThemeProvider::icon(const QString &name)
                                            .arg(name));
 }
 
-QColor ThemeProvider::seekColor() { return ThemeProvider::themeValue("seek"); }
-QColor ThemeProvider::dottedColor() { return ThemeProvider::themeValue("meta_fg"); }
+QColor ThemeProvider::seekColor() { return ThemeProvider::themeValue(Theme_Seek); }
+QColor ThemeProvider::metaColor() { return ThemeProvider::themeValue(Theme_Meta); }
 
 void ThemeProvider::styleCornerButton(QTableView* tableview)
 {
@@ -98,6 +87,54 @@ void ThemeProvider::applyTheme()
     THEME_UI_SET_COLOR(palette, ToolTipText);
 
     qApp->setPalette(palette);
+    ThemeProvider::applyListingTheme();
+}
+
+void ThemeProvider::applyListingTheme()
+{
+    static std::unordered_map<std::string, rd_type> themes = {
+        { "foreground", Theme_Foreground },
+        { "background", Theme_Background },
+        { "seek", Theme_Seek },
+        { "comment", Theme_Comment },
+        { "meta", Theme_Meta },
+        { "highlight_fg", Theme_HighlightFg },
+        { "highlight_bg", Theme_HighlightBg },
+        { "selection_fg", Theme_SelectionFg },
+        { "selection_bg", Theme_SelectionBg },
+        { "cursor_fg", Theme_CursorFg },
+        { "cursor_bg", Theme_CursorBg },
+        { "segment", Theme_Segment },
+        { "function", Theme_Function },
+        { "address", Theme_Address },
+        { "constant", Theme_Constant },
+        { "reg", Theme_Reg },
+        { "string", Theme_String },
+        { "symbol", Theme_Symbol },
+        { "data", Theme_Data },
+        { "pointer", Theme_Pointer },
+        { "import", Theme_Import },
+        { "type", Theme_Type },
+        { "nop", Theme_Nop },
+        { "ret", Theme_Ret },
+        { "call", Theme_Call },
+        { "jump", Theme_Jump },
+        { "jump_c", Theme_JumpCond },
+        { "entry_fg", Theme_EntryFg },
+        { "entry_bg", Theme_EntryBg },
+        { "graph_bg", Theme_GraphBg },
+        { "graph_edge", Theme_GraphEdge },
+        { "graph_edge_true", Theme_GraphEdgeTrue },
+        { "graph_edge_false", Theme_GraphEdgeFalse },
+        { "graph_edge_loop", Theme_GraphEdgeLoop },
+        { "graph_edge_loop_c", Theme_GraphEdgeLoopCond } };
+
+    for(auto it = m_theme.begin(); it != m_theme.end(); it++)
+    {
+        auto thit = themes.find(it.key().toStdString());
+        if(thit == themes.end()) continue;
+        RDConfig_SetTheme(thit->second, it.value().toString().toStdString().c_str());
+    }
 }
 
 QStringList ThemeProvider::readThemes(const QString &path)

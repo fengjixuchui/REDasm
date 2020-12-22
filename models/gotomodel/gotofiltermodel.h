@@ -9,7 +9,8 @@ class GotoFilterModel : public QSortFilterProxyModel
 
     public:
         explicit GotoFilterModel(QObject *parent = nullptr);
-        void setDisassembler(const REDasm::DisassemblerPtr &disassembler);
+        void setContext(const RDContextPtr& ctx);
+        const RDDocumentItem& item(const QModelIndex& index) const;
 
     protected:
         bool filterAcceptsRow(int sourcerow, const QModelIndex &sourceparent) const override;

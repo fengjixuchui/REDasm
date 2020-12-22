@@ -1,53 +1,26 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "dialogs/signaturesdialog/signaturesdialog.h"
-#include "dialogs/problemsdialog/problemsdialog.h"
-#include "dialogs/settingsdialog/settingsdialog.h"
-#include "dialogs/aboutdialog/aboutdialog.h"
-#include "dialogs/tabledialog/tabledialog.h"
-#include "models/dev/blocklistmodel.h"
-#include "ui/redasmui.h"
+#include "redasmfonts.h"
 #include "redasmsettings.h"
+#include "hooks/disassemblerhooks.h"
+#include "widgets/disassemblerview.h"
+#include "dialogs/signaturesdialog/signaturesdialog.h"
+#include "ui/qtui.h"
 #include "themeprovider.h"
-#include "convert.h"
-#include <redasm/plugins/assembler/assembler.h>
-#include <redasm/plugins/pluginmanager.h>
-#include <redasm/support/utils.h>
-#include <QtConcurrent/QtConcurrent>
-#include <QFutureWatcher>
-#include <QtWidgets>
-#include <QtCore>
+#include <QMessageBox>
 #include <QtGui>
+#include <rdapi/rdapi.h>
 
 #define PLUGINS_FOLDER_NAME "plugins"
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    ui->toolBar->actions()[3]->setVisible(false); // Hide separator
-    this->tabifyDockWidget(ui->dockFunctions, ui->dockCallTree);
+    ui->action_Open->setIcon(FA_ICON(0xf07c));
+    ui->action_Save->setIcon(FA_ICON(0xf0c7));
 
-    REDasm::ContextSettings ctxsettings;
-    ctxsettings.tempPath = Convert::to_rstring(QStandardPaths::writableLocation(QStandardPaths::TempLocation));
-    ctxsettings.runtimePath = Convert::to_rstring(QDir::currentPath());
-    ctxsettings.statusCallback = [&](const REDasm::String& s) { QMetaObject::invokeMethod(m_lblstatus, "setText", Qt::QueuedConnection, Q_ARG(QString, Convert::to_qstring(s))); };
-    ctxsettings.progressCallback = [&](size_t pending) { QMetaObject::invokeMethod(m_lblprogress, "setText", Qt::QueuedConnection, Q_ARG(QString, QString("%1 state(s) pending").arg(pending))); };
-    ctxsettings.logCallback = [&](const REDasm::String& s) { QMetaObject::invokeMethod(ui->pteOutput, "log", Qt::QueuedConnection, Q_ARG(QString, Convert::to_qstring(s))); };
-    ctxsettings.ui = std::make_shared<REDasmUI>(this);
-    
-    ctxsettings.pluginPaths.push_front(REDasm::Path::create(ctxsettings.runtimePath, PLUGINS_FOLDER_NAME));
-
-    for(const QString& searchpaths : QStandardPaths::standardLocations(QStandardPaths::AppDataLocation))
-        ctxsettings.pluginPaths.push_back(REDasm::Path::create(Convert::to_rstring(searchpaths), PLUGINS_FOLDER_NAME));
-
-    REDasm::Context::init(ctxsettings);
-    //r_ctx->sync(true);
-    this->setViewWidgetsVisible(false);
-    ui->leFilter->setVisible(false);
-
-    ui->action_Open->setIcon(THEME_ICON("open"));
-    ui->action_Save->setIcon(THEME_ICON("save"));
-    ui->action_Signatures->setIcon(THEME_ICON("database"));
+    this->setDockNestingEnabled(true);
+    this->setTabPosition(Qt::TopDockWidgetArea, QTabWidget::North);
 
     m_lblstatus = new QLabel(this);
     m_lblprogress = new QLabel(this);
@@ -55,49 +28,45 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_lblprogress->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     m_lblstatusicon = new QLabel(this);
-    m_lblstatusicon->setFixedWidth(ui->statusBar->height() * 0.8);
+    m_lblstatusicon->setObjectName(HOOK_STATUS_ICON);
     m_lblstatusicon->setFixedHeight(ui->statusBar->height() * 0.8);
-    m_lblstatusicon->setText(QString::fromWCharArray(L"\u25cf"));
+    m_lblstatusicon->setFont(FA_FONT);
+    m_lblstatusicon->setText(u8"\uf017");
     m_lblstatusicon->setVisible(false);
 
+    m_pbrenderer = new QPushButton(this);
+    m_pbrenderer->setObjectName(HOOK_RENDERER);
+    m_pbrenderer->setFixedHeight(ui->statusBar->height() * 0.8);
+    m_pbrenderer->setVisible(false);
+    m_pbrenderer->setFlat(true);
+
     m_pbproblems = new QPushButton(this);
-    m_pbproblems->setFlat(true);
+    m_pbproblems->setObjectName(HOOK_PROBLEMS);
     m_pbproblems->setFixedHeight(ui->statusBar->height() * 0.8);
     m_pbproblems->setVisible(false);
+    m_pbproblems->setFlat(true);
 
     ui->statusBar->addPermanentWidget(m_lblstatus, 70);
     ui->statusBar->addPermanentWidget(m_lblprogress, 30);
+    ui->statusBar->addPermanentWidget(m_pbrenderer);
     ui->statusBar->addPermanentWidget(m_pbproblems);
     ui->statusBar->addPermanentWidget(m_lblstatusicon);
 
+    DisassemblerHooks::initialize(this);
+    this->initializeConfig();
     this->setAcceptDrops(true);
     this->loadWindowState();
-    this->loadRecents();
     this->checkCommandLine();
-    this->initShortcuts();
 
-    connect(ui->action_Open, &QAction::triggered, this, &MainWindow::onOpenClicked);
-    connect(ui->action_Save, &QAction::triggered, this, &MainWindow::onSaveClicked);
-    connect(ui->action_Save_As, &QAction::triggered, this, &MainWindow::onSaveAsClicked);
-    connect(ui->action_Close, &QAction::triggered, this, &MainWindow::closeFile);
-    connect(ui->action_Exit, &QAction::triggered, this, &MainWindow::onExitClicked);
-    connect(ui->action_Signatures, &QAction::triggered, this, &MainWindow::onSignaturesClicked);
-    connect(ui->action_Reset_Layout, &QAction::triggered, this, &MainWindow::onResetLayoutClicked);
-    connect(ui->action_Settings, &QAction::triggered, this, &MainWindow::onSettingsClicked);
-    connect(ui->action_Blocks, &QAction::triggered, this, &MainWindow::onBlocksClicked);
-    connect(ui->action_About_REDasm, &QAction::triggered, this, &MainWindow::onAboutClicked);
-
-    connect(ui->action_Report_Bug, &QAction::triggered, this, []() {
-        QDesktopServices::openUrl(QUrl("https://github.com/REDasmOrg/REDasm/issues"));
-    });
-
-    connect(ui->action_Subscribe_to_r_REDasm, &QAction::triggered, this, []() {
-        QDesktopServices::openUrl(QUrl("https://www.reddit.com/r/REDasm"));
-    });
-
-    connect(m_pbproblems, &QPushButton::clicked, this, &MainWindow::showProblems);
-
-    qApp->installEventFilter(this);
+    connect(ui->action_Open, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::open);
+    connect(ui->action_Save, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::save);
+    connect(ui->action_Save_As, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::saveAs);
+    connect(ui->action_Close, &QAction::triggered, DisassemblerHooks::instance(), qOverload<>(&DisassemblerHooks::close));
+    connect(ui->action_Settings, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::settings);
+    connect(ui->action_Developer_Tools, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::showDeveloperTools);
+    connect(ui->action_Reset_Layout, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::resetLayout);
+    connect(ui->action_About, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::about);
+    connect(ui->action_Exit, &QAction::triggered, DisassemblerHooks::instance(), &DisassemblerHooks::exit);
 }
 
 MainWindow::~MainWindow() { delete ui; }
@@ -110,7 +79,7 @@ void MainWindow::closeEvent(QCloseEvent *e)
         return;
     }
 
-    this->closeFile(); // Deallocate actions and docks
+    DisassemblerHooks::instance()->close();
     QWidget::closeEvent(e);
 }
 
@@ -129,231 +98,89 @@ void MainWindow::dragMoveEvent(QDragMoveEvent *e)
 void MainWindow::dropEvent(QDropEvent *e)
 {
     const QMimeData* mimedata = e->mimeData();
+    if(!mimedata->hasUrls()) return;
 
-    if(!mimedata->hasUrls())
-        return;
+    QList<QUrl> urllist = mimedata->urls();
+    QString locfile = urllist.first().toLocalFile();
 
-      QList<QUrl> urllist = mimedata->urls();
-      QString locfile = urllist.first().toLocalFile();
-      QFileInfo fi(locfile);
+    QFileInfo fi(locfile);
+    if(!fi.isFile()) return;
 
-      if(!fi.isFile())
-          return;
-
-      this->load(locfile);
-      e->acceptProposedAction();
-}
-
-bool MainWindow::eventFilter(QObject *obj, QEvent *e)
-{
-    DisassemblerView* disassemblerview = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
-
-    if(disassemblerview && !disassemblerview->disassembler()->busy())
-    {
-        if(e->type() == QEvent::KeyPress)
-        {
-            QKeyEvent* keyevent = static_cast<QKeyEvent*>(e);
-
-            if(ui->leFilter->isVisible() && keyevent->matches(QKeySequence::Cancel))
-            {
-                disassemblerview->clearFilter();
-                return true;
-            }
-            else if(keyevent->key() == Qt::Key_F3)
-            {
-                disassemblerview->toggleFilter();
-                return true;
-            }
-        }
-    }
-
-    return QMainWindow::eventFilter(obj, e);
-}
-
-void MainWindow::onOpenClicked()
-{
-    QString s = QFileDialog::getOpenFileName(this, "Disassemble file...");
-
-    if(s.isEmpty())
-        return;
-
-    this->load(s);
+    DisassemblerHooks::instance()->load(locfile);
+    e->acceptProposedAction();
 }
 
 void MainWindow::onSaveClicked()
 {
-    DisassemblerView* currdv = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
+    // DisassemblerView* currdv = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
+    // if(!currdv) return;
 
-    if(!currdv)
-        return;
+    // REDasm::String rdbfile = Convert::to_rstring(QString("%1.%2").arg(m_fileinfo.baseName(), RDB_SIGNATURE_EXT));
+    // r_ctx->log("Saving Database " + rdbfile.quoted());
 
-    REDasm::String rdbfile = Convert::to_rstring(QString("%1.%2").arg(m_fileinfo.baseName(), RDB_SIGNATURE_EXT));
-    r_ctx->log("Saving Database " + rdbfile.quoted());
-
-    if(!REDasm::Database::save(currdv->disassembler(), rdbfile, Convert::to_rstring(m_fileinfo.fileName())))
-        r_ctx->log(REDasm::Database::lastError());
+    //if(!REDasm::Database::save(currdv->disassembler(), rdbfile, Convert::to_rstring(m_fileinfo.fileName())))
+        //r_ctx->log(REDasm::Database::lastError());
 }
 
 void MainWindow::onSaveAsClicked() // TODO: Handle multiple outputs
 {
-    QString s = QFileDialog::getSaveFileName(this, "Save As...", m_fileinfo.fileName(), "REDasm Database (*.rdb)");
-    if(s.isEmpty()) return;
+    // QString s = QFileDialog::getSaveFileName(this, "Save As...", m_fileinfo.fileName(), "REDasm Database (*.rdb)");
+    // if(s.isEmpty()) return;
 
-    DisassemblerView* currdv = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
-    if(!currdv) return;
+    // DisassemblerView* currdv = dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget());
+    // if(!currdv) return;
 
-    if(!REDasm::Database::save(currdv->disassembler(), Convert::to_rstring(s), Convert::to_rstring(m_fileinfo.fileName())))
-        r_ctx->log(REDasm::Database::lastError());
-}
-
-void MainWindow::onRecentFileClicked()
-{
-    QAction* sender = qobject_cast<QAction*>(this->sender());
-
-    if(sender)
-        this->load(sender->data().toString());
-}
-
-void MainWindow::onExitClicked()
-{
-    if(!this->canClose())
-        return;
-
-    qApp->exit();
+    //if(!REDasm::Database::save(currdv->disassembler(), Convert::to_rstring(s), Convert::to_rstring(m_fileinfo.fileName())))
+        //r_ctx->log(REDasm::Database::lastError());
 }
 
 void MainWindow::onSignaturesClicked()
 {
-    SignaturesDialog dlgsignatures(this->currentDisassembler(), this);
-    dlgsignatures.exec();
+    //SignaturesDialog dlgsignatures(this->currentDisassembler(), this);
+    //dlgsignatures.exec();
 }
 
 void MainWindow::onResetLayoutClicked()
 {
     REDasmSettings settings;
     settings.defaultState(this);
-    this->setViewWidgetsVisible(this->currentDisassembler());
-}
-
-void MainWindow::onSettingsClicked()
-{
-    SettingsDialog sd(this);
-    sd.exec();
-}
-
-void MainWindow::onBlocksClicked()
-{
-    if(!this->currentDisassemblerView()) return;
-    static TableDialog* td = nullptr;
-
-    if(!td)
-    {
-        td = new TableDialog(this);
-        td->setWindowTitle("Block List");
-        td->enableFiltering();
-        td->setButtonBoxVisible(false);
-        td->setModel(new BlockListModel());
-    }
-
-    td->show();
 }
 
 void MainWindow::loadWindowState()
 {
     REDasmSettings settings;
-
-    if(settings.restoreState(this))
-        return;
+    if(settings.restoreState(this)) return;
 
     QRect position = this->frameGeometry();
     position.moveCenter(qApp->primaryScreen()->availableGeometry().center());
     this->move(position.topLeft());
 }
 
-void MainWindow::loadRecents()
-{
-    REDasmSettings settings;
-    m_recents = settings.recentFiles();
-    ui->action_Recent_Files->setEnabled(!m_recents.empty());
-
-    QMenu* mnurecents = ui->action_Recent_Files->menu();
-
-    if(!mnurecents)
-    {
-        mnurecents = new QMenu(this);
-        ui->action_Recent_Files->setMenu(mnurecents);
-    }
-    else
-        mnurecents->clear();
-
-    for(int i = 0; i < MAX_RECENT_FILES; i++)
-    {
-        if(i >= m_recents.length())
-        {
-            QAction* action = mnurecents->addAction(QString());
-            action->setVisible(false);
-            continue;
-        }
-
-        if(!QFileInfo(m_recents[i]).exists())
-            continue;
-
-        QAction* action = mnurecents->addAction(QString("%1 - %2").arg(i).arg(m_recents[i]));
-        action->setData(m_recents[i]);
-        connect(action, &QAction::triggered, this, &MainWindow::onRecentFileClicked);
-    }
-}
-
 bool MainWindow::loadDatabase(const QString &filepath)
 {
-    REDasm::String filename;
-    REDasm::Disassembler* disassembler = REDasm::Database::load(Convert::to_rstring(filepath), filename);
+    // REDasm::String filename;
+    // REDasm::Disassembler* disassembler = REDasm::Database::load(Convert::to_rstring(filepath), filename);
 
-    if(!disassembler)
-    {
-        if(m_fileinfo.suffix() == RDB_SIGNATURE_EXT)
-            r_ctx->log(REDasm::Database::lastError());
+    // if(!disassembler)
+    // {
+    //     if(m_fileinfo.suffix() == RDB_SIGNATURE_EXT)
+    //         r_ctx->log(REDasm::Database::lastError());
 
-        return false;
-    }
+    //     return false;
+    // }
 
-    r_ctx->log("Selected loader " + REDasm::String(disassembler->loader()->description()).quoted() + " with " +
-                                    REDasm::String(disassembler->assembler()->description()).quoted() + " instruction set");
+    //r_ctx->log("Selected loader " + REDasm::String(disassembler->loader()->description()).quoted() + " with " +
+                                    //REDasm::String(disassembler->assembler()->description()).quoted() + " instruction set");
 
-    m_fileinfo = QFileInfo(Convert::to_qstring(filename));
-    this->showDisassemblerView(disassembler);
+    //m_fileinfo = QFileInfo(Convert::to_qstring(filename));
+    //this->showDisassemblerView(disassembler);
     return true;
-}
-
-void MainWindow::load(const QString& filepath)
-{
-    this->closeFile();
-
-    m_fileinfo = QFileInfo(filepath);
-    QDir::setCurrent(m_fileinfo.path());
-
-    REDasmSettings settings;
-    settings.updateRecentFiles(filepath);
-    this->loadRecents();
-
-    if(this->loadDatabase(filepath))
-        return;
-
-    REDasm::MemoryBuffer* buffer = REDasm::MemoryBuffer::fromFile(Convert::to_rstring(filepath)); // TODO: Deallocate in case of user-cancel?
-
-    if(buffer && !buffer->empty())
-    {
-        REDasm::LoadRequest request(Convert::to_rstring(filepath), buffer);
-        this->selectLoader(request);
-    }
 }
 
 void MainWindow::checkCommandLine()
 {
     QStringList args = qApp->arguments();
-
-    if(args.length() <= 1)
-        return;
+    if(args.length() <= 1) return;
 
     args = args.mid(1); // Skip REDasm's path
 
@@ -364,54 +191,14 @@ void MainWindow::checkCommandLine()
         if(!fileinfo.exists() || !fileinfo.isFile() || !fileinfo.isReadable())
             continue;
 
-        this->load(arg);
+        DisassemblerHooks::instance()->load(arg);
         break;
     }
 }
 
-void MainWindow::initShortcuts()
-{
-    auto actions = ui->menu_Development->actions();
-
-    for(int i = 1; i < actions.size(); i++)
-        actions[i]->setShortcut(QKeySequence(QString("CTRL+SHIFT+F%1").arg(i)));
-}
-
-void MainWindow::setStandardActionsEnabled(bool b)
-{
-    ui->action_Save->setEnabled(b);
-    ui->action_Save_As->setEnabled(b);
-    ui->action_Signatures->setEnabled(b);
-    ui->menu_Development->setEnabled(this->currentDisassemblerView() || b);
-}
-
-void MainWindow::showDisassemblerView(REDasm::Disassembler *disassembler)
-{
-    r_evt::subscribe(REDasm::StandardEvents::Disassembler_BusyChanged, this, [&](const REDasm::EventArgs*) {
-        QMetaObject::invokeMethod(this, "checkDisassemblerStatus", Qt::QueuedConnection);
-    });
-
-    ui->pteOutput->clear();
-
-    QWidget* oldwidget = ui->stackView->widget(0);
-
-    if(oldwidget)
-    {
-        ui->stackView->removeWidget(oldwidget);
-        oldwidget->deleteLater();
-    }
-
-    DisassemblerView *dv = new DisassemblerView(ui->leFilter);
-    dv->bindDisassembler(disassembler); // Take ownership
-    ui->stackView->addWidget(dv);
-
-    this->setViewWidgetsVisible(true);
-    this->checkDisassemblerStatus();
-}
-
 bool MainWindow::canClose()
 {
-    if(dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget()))
+    if(this->findChild<DisassemblerView*>(QString()))
     {
         QMessageBox msgbox(this);
         msgbox.setWindowTitle("Closing");
@@ -422,146 +209,31 @@ bool MainWindow::canClose()
             return false;
     }
 
-    this->setViewWidgetsVisible(false);
-    REDasmSettings settings;
-    settings.saveState(this);
+    // REDasmSettings settings;
+    // settings.saveState(this);
     return true;
 }
 
-void MainWindow::closeFile()
+void MainWindow::initializeConfig()
 {
-    REDasm::Disassembler* disassembler = this->currentDisassembler();
+    RDConfig_SetLogCallback([](const char* s, void*) {
+        QMetaObject::invokeMethod(DisassemblerHooks::instance(), "log", Qt::QueuedConnection, Q_ARG(QString, QString::fromUtf8(s)));
+    }, nullptr);
 
-    // TODO: messageBox for confirmation?
-    if(disassembler)
-    {
-        r_evt::unsubscribe();
-        disassembler->stop();
-    }
+    RDConfig_SetStatusCallback([](const char* s, void* userdata) {
+        QLabel* lblstatus = reinterpret_cast<QLabel*>(userdata);
+        QMetaObject::invokeMethod(lblstatus, "setText", Qt::QueuedConnection, Q_ARG(QString, QString::fromUtf8(s)));
+    }, m_lblstatus);
 
-    DisassemblerView* oldview = this->currentDisassemblerView();
+    RDConfig_SetProgressCallback([](size_t pending, void* userdata) {
+        QLabel* lblprogress = reinterpret_cast<QLabel*>(userdata);
+        QMetaObject::invokeMethod(lblprogress, "setText", Qt::QueuedConnection, Q_ARG(QString, QString("%1 state(s) pending").arg(pending)));
+    }, m_lblprogress);
 
-    if(oldview != nullptr)
-    {
-        oldview->hideActions();
-        ui->stackView->removeWidget(oldview);
-        oldview->deleteLater();
-    }
+    RDConfig_AddPluginPath(qUtf8Printable(QDir(RDConfig_GetRuntimePath()).absoluteFilePath(PLUGINS_FOLDER_NAME)));
 
-    ui->action_Close->setEnabled(false);
-    ui->pteOutput->clear();
-    m_lblstatus->clear();
-    m_lblprogress->setVisible(false);
-    m_lblstatusicon->setVisible(false);
-    m_pbproblems->setVisible(false);
-    this->setStandardActionsEnabled(false);
-    this->setViewWidgetsVisible(false);
-    r_ctx->clearProblems();
-}
+    for(const QString& searchpaths : QStandardPaths::standardLocations(QStandardPaths::AppDataLocation))
+        RDConfig_AddPluginPath(qUtf8Printable(QDir(searchpaths).absoluteFilePath(PLUGINS_FOLDER_NAME)));
 
-void MainWindow::selectLoader(const REDasm::LoadRequest& request)
-{
-    LoaderDialog dlgloader(request, this);
-    if(dlgloader.exec() != LoaderDialog::Accepted) return;
-
-    const REDasm::PluginInstance *assemblerpi = nullptr, *loaderpi = dlgloader.selectedLoader();
-    REDasm::Loader* loader = plugin_cast<REDasm::Loader>(loaderpi);
-
-    if(loader->flags() & REDasm::LoaderFlags::CustomAssembler) assemblerpi = dlgloader.selectedAssembler();
-    else assemblerpi = r_pm->findAssembler(loader->assembler());
-
-    if(!assemblerpi)
-    {
-        QString assembler = Convert::to_qstring(loader->assembler());
-
-        QMessageBox::information(this, "Assembler Error",
-                                 assembler.isEmpty() ? QString("Assembler not set for '%1'").arg(Convert::to_qstring(loader->descriptor()->description)) :
-                                                       QString("Cannot find assembler '%1'").arg(assembler));
-
-        connect(&dlgloader, &LoaderDialog::destroyed, this, [loader]() {
-            r_pm->unload(loader->instance());
-        });
-
-        return;
-    }
-
-    REDasm::Assembler* assembler = plugin_cast<REDasm::Assembler>(assemblerpi);
-    assembler->init(loader->assembler());
-
-    r_ctx->log("Selected loader " + REDasm::String(loader->description()).quoted() +
-               " with " + REDasm::String(assembler->description()).quoted() + " assembler");
-
-    REDasm::Disassembler* disassembler = new REDasm::Disassembler(assembler, loader);
-
-    r_evt::subscribe(REDasm::StandardEvents::Disassembler_BusyChanged, this, [&](const REDasm::EventArgs*) {
-        QMetaObject::invokeMethod(m_lblprogress, "setVisible", Qt::QueuedConnection, Q_ARG(bool, r_disasm->busy()));
-    });
-
-    this->showDisassemblerView(disassembler); // Take ownership
-
-    if(r_ldr->flags() & REDasm::LoaderFlags::CustomAddressing)
-    {
-        r_ldr->build(assembler->id(), dlgloader.offset(), dlgloader.baseAddress(), dlgloader.entryPoint());
-        this->currentDisassembler()->disassemble();
-    }
-    else
-    {
-        auto* futurewatcher = new QFutureWatcher<void>(this);
-        connect(futurewatcher, &QFutureWatcher<void>::finished, this, [&]() { this->currentDisassembler()->disassemble(); });
-        connect(futurewatcher, &QFutureWatcher<void>::finished, futurewatcher, &QFutureWatcher<void>::deleteLater);
-        futurewatcher->setFuture(QtConcurrent::run([&]() { r_ldr->load(); }));
-    }
-}
-
-void MainWindow::setViewWidgetsVisible(bool b)
-{
-    ui->dockFunctions->setVisible(b);
-    ui->dockCallTree->setVisible(b);
-    ui->dockReferences->setVisible(b);
-    ui->dockListingMap->setVisible(b);
-}
-
-void MainWindow::onAboutClicked()
-{
-    AboutDialog dlgabout(this);
-    dlgabout.exec();
-}
-
-void MainWindow::checkDisassemblerStatus()
-{
-    if(!r_disasm)
-    {
-        ui->action_Close->setEnabled(false);
-        m_lblstatusicon->setVisible(false);
-        m_pbproblems->setVisible(false);
-        return;
-    }
-
-    if(r_disasm->busy())
-    {
-        this->setWindowTitle(QString("%1 (Working)").arg(m_fileinfo.fileName()));
-        m_lblstatusicon->setStyleSheet("color: red;");
-    }
-    else
-    {
-        this->setWindowTitle(m_fileinfo.fileName());
-        m_lblstatusicon->setStyleSheet("color: green;");
-    }
-
-    m_lblstatusicon->setVisible(true);
-    m_lblprogress->setVisible(r_disasm->busy());
-    m_pbproblems->setText(QString::number(r_ctx->problemsCount()) + " problem(s)");
-    m_pbproblems->setVisible(!r_disasm->busy() && r_ctx->hasProblems());
-
-    this->setStandardActionsEnabled(!r_disasm->busy());
-    ui->action_Close->setEnabled(true);
-}
-
-void MainWindow::showProblems() { ProblemsDialog dlgproblems(this); dlgproblems.exec(); }
-DisassemblerView *MainWindow::currentDisassemblerView() const { return dynamic_cast<DisassemblerView*>(ui->stackView->currentWidget()); }
-
-REDasm::Disassembler *MainWindow::currentDisassembler() const
-{
-    DisassemblerView* currdv = this->currentDisassemblerView();
-    return currdv ? currdv->disassembler(): nullptr;
+    QtUI::initialize();
 }

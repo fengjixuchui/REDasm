@@ -1,19 +1,17 @@
 #pragma once
 
-#include <QAbstractItemModel>
-#include <redasm/plugins/assembler/printer/printer.h>
-#include <redasm/disassembler/model/calltree.h>
-#include <redasm/disassembler/disassembler.h>
+#include "contextmodel.h"
+#include <rdapi/rdapi.h>
+#include "../hooks/isurface.h"
 
-class CallTreeModel : public QAbstractItemModel
+class CallTreeModel : public ContextModel
 {
     Q_OBJECT
 
     public:
         explicit CallTreeModel(QObject *parent = nullptr);
-        const REDasm::ListingItem& item(const QModelIndex& index) const;
-        void setDisassembler(const REDasm::DisassemblerPtr&);
-        void initializeGraph(address_t address);
+        RDDocumentItem item(const QModelIndex& index) const;
+        void initializeGraph(rd_address address);
 
     public:
         bool hasChildren(const QModelIndex& parentindex) const override;
@@ -21,14 +19,14 @@ class CallTreeModel : public QAbstractItemModel
         QModelIndex parent(const QModelIndex &child) const override;
         QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
         QVariant data(const QModelIndex &index, int role) const override;
-        int columnCount(const QModelIndex& parent) const override;
+        int columnCount(const QModelIndex&) const override;
         int rowCount(const QModelIndex& parent) const override;
 
     public slots:
         void populateCallGraph(const QModelIndex& index);
 
     private:
-        REDasm::object_ptr<REDasm::Printer> m_printer;
-        std::unique_ptr<REDasm::CallTree> m_calltree;
-        REDasm::ListingItem m_currentitem;
+        //REDasm::object_ptr<REDasm::Printer> m_printer;
+        //std::unique_ptr<REDasm::CallTree> m_calltree;
+        //REDasm::ListingItem m_currentitem;
 };

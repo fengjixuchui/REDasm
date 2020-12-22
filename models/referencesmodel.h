@@ -1,19 +1,18 @@
 #pragma once
 
-#include <redasm/plugins/assembler/printer/printer.h>
-#include <redasm/types/containers/set.h>
-#include "disassemblermodel.h"
+#include "contextmodel.h"
+#include <rdapi/rdapi.h>
 
-class ReferencesModel : public DisassemblerModel
+class ReferencesModel : public ContextModel
 {
     Q_OBJECT
 
     public:
         explicit ReferencesModel(QObject *parent = nullptr);
-        void xref(address_t address);
+        void xref(rd_address address);
 
     public:
-        QModelIndex index(int row, int column, const QModelIndex &) const override;
+        QModelIndex index(int row, int column, const QModelIndex&) const override;
         QVariant data(const QModelIndex &index, int role) const override;
         QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
         int rowCount(const QModelIndex&) const override;
@@ -23,9 +22,10 @@ class ReferencesModel : public DisassemblerModel
         void clear();
 
     private:
-        QString direction(address_t address) const;
+        QString direction(rd_address address) const;
 
     private:
-        REDasm::SortedSet m_references;
-        REDasm::object_ptr<REDasm::Printer> m_printer;
+        SurfaceQt* m_surface;
+        const rd_address* m_references{nullptr};
+        size_t m_referencescount{0};
 };

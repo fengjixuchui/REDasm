@@ -1,30 +1,29 @@
-#include "gotodialog.h"
+﻿#include "gotodialog.h"
 #include "ui_gotodialog.h"
-#include <redasm/context.h>
+#include "../../hooks/disassemblerhooks.h"
+#include "../../renderer/surfaceqt.h"
 
-GotoDialog::GotoDialog(const REDasm::DisassemblerPtr& disassembler, QWidget *parent) : QDialog(parent), ui(new Ui::GotoDialog), m_disassembler(disassembler), m_address(0), m_validaddress(false)
+GotoDialog::GotoDialog(const RDContextPtr& ctx, ISurface* surface, QWidget *parent) : QDialog(parent), ui(new Ui::GotoDialog), m_context(ctx), m_surface(surface)
 {
     ui->setupUi(this);
 
+    m_document = RDContext_GetDocument(ctx.get());
     m_gotomodel = new GotoFilterModel(ui->tvFunctions);
-    m_gotomodel->setDisassembler(disassembler);
+    m_gotomodel->setContext(ctx);
 
     ui->tvFunctions->setModel(m_gotomodel);
     ui->tvFunctions->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     ui->tvFunctions->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
 
     connect(ui->leAddress, &QLineEdit::textChanged, this, [=](const QString) { this->validateEntry(); });
-    connect(ui->leAddress, &QLineEdit::returnPressed, this, &GotoDialog::accept);
-
+    connect(ui->leAddress, &QLineEdit::returnPressed, this, &GotoDialog::onGotoClicked);
     connect(ui->tvFunctions, &QTableView::doubleClicked, this, &GotoDialog::onItemSelected);
     connect(ui->tvFunctions, &QTableView::doubleClicked, this, &GotoDialog::accept);
-
-    connect(ui->pbGoto, &QPushButton::clicked, this, &GotoDialog::accept);
+    connect(ui->pbGoto, &QPushButton::clicked, this, &GotoDialog::onGotoClicked);
 }
 
 GotoDialog::~GotoDialog() { delete ui; }
-address_t GotoDialog::address() const { return m_address; }
-bool GotoDialog::hasValidAddress() const { return m_validaddress && r_doc->segment(m_address); }
+bool GotoDialog::hasValidAddress() const { return m_validaddress && RDDocument_GetSegmentAddress(m_document, m_address, nullptr); }
 
 void GotoDialog::validateEntry()
 {
@@ -45,8 +44,19 @@ void GotoDialog::validateEntry()
     m_gotomodel->setFilterFixedString(s);
 }
 
+void GotoDialog::onGotoClicked()
+{
+    if(this->hasValidAddress())
+    {
+        auto* surface = DisassemblerHooks::instance()->activeSurface();
+        if(surface) surface->goToAddress(m_address);
+    }
+
+    this->accept();
+}
+
 void GotoDialog::onItemSelected(const QModelIndex &index)
 {
-    m_validaddress = false;
-    emit symbolSelected(m_gotomodel->mapToSource(index));
+    QModelIndex srcindex = m_gotomodel->mapToSource(index);
+    if(srcindex.isValid()) m_surface->goTo(std::addressof(m_gotomodel->item(index)));
 }

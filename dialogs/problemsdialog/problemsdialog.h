@@ -1,22 +1,25 @@
-#ifndef PROBLEMSDIALOG_H
-#define PROBLEMSDIALOG_H
+#pragma once
 
 #include <QDialog>
+#include "../hooks/isurface.h"
 
 namespace Ui {
 class ProblemsDialog;
 }
+
+class QStandardItemModel;
 
 class ProblemsDialog : public QDialog
 {
     Q_OBJECT
 
     public:
-        explicit ProblemsDialog(QWidget *parent = nullptr);
+        explicit ProblemsDialog(const RDContextPtr& ctx, QWidget *parent = nullptr);
         ~ProblemsDialog();
 
     private:
         Ui::ProblemsDialog *ui;
-};
+        RDContextPtr m_context;
+        QStandardItemModel* m_problemsmodel;
 
-#endif // PROBLEMSDIALOG_H
+};

@@ -1,75 +1,82 @@
 #include "blocklistmodel.h"
-#include <redasm/context.h>
-#include <redasm/disassembler/disassembler.h>
 #include "../../themeprovider.h"
-#include "../../convert.h"
 
-BlockListModel::BlockListModel(QObject *parent) : QAbstractListModel(parent) { }
+BlockListModel::BlockListModel(const RDContextPtr& ctx, const RDBlockContainer* blocks, QObject *parent) : QAbstractListModel(parent), m_blockcontainer(blocks), m_context(ctx)
+{
+    m_document = RDContext_GetDocument(ctx.get());
+
+    RDBlockContainer_Each(blocks, [](const RDBlock* b, void* userdata) {
+       auto* thethis = reinterpret_cast<BlockListModel*>(userdata);
+       thethis->m_blocks.push_back(*b);
+       return true;
+    }, this);
+}
 
 QVariant BlockListModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
     if(role != Qt::DisplayRole) return QVariant();
+    if(orientation != Qt::Horizontal) return QVariant();
 
-    if(orientation == Qt::Horizontal)
+    switch(section)
     {
-        switch(section)
-        {
-            case 0: return "Start Address";
-            case 1: return "End Address";
-            case 2: return "Size";
-            case 3: return "Type";
-            case 4: return "Symbol";
-            default: break;
-        }
+        case 0: return "Start Address";
+        case 1: return "End Address";
+        case 2: return "Size";
+        case 3: return "Type";
+        case 4: return "Symbol";
+        default: break;
     }
-    else
-        return this->segmentName(section);
 
     return QVariant();
 }
 
 QVariant BlockListModel::data(const QModelIndex& index, int role) const
 {
+    if(!m_blockcontainer) return QVariant();
+
     if(role == Qt::DisplayRole)
     {
-        const REDasm::BlockItem* bi = r_doc->blocks()->at(index.row());
+        const RDBlock& block = m_blocks[index.row()];
 
         switch(index.column())
         {
-            case 0: return Convert::to_qstring(REDasm::String::hex(bi->start));
-            case 1: return Convert::to_qstring(REDasm::String::hex(bi->end));
-            case 2: return Convert::to_qstring(REDasm::String::hex(bi->size()));
-            case 3: return Convert::to_qstring(bi->displayType());
-            case 4: return this->symbolName(index);
+            case 0: return RD_ToHexAuto(m_context.get(), block.start);
+            case 1: return RD_ToHexAuto(m_context.get(), block.end);
+            case 2: return RD_ToHexAuto(m_context.get(), RDBlock_Size(&block));
+            case 3: return this->blockType(&block);
+            case 4: return this->symbolName(&block);
             default: break;
         }
     }
     else if(role == Qt::TextAlignmentRole) return Qt::AlignCenter;
     else if(role == Qt::ForegroundRole)
     {
-        if(index.column() < 3)  return THEME_VALUE("address_list_fg");
-        if(index.column() == 3) return THEME_VALUE("type_fg");
-        if(index.column() == 4) return THEME_VALUE("label_fg");
+        if(index.column() < 3)  return THEME_VALUE(Theme_Address);
+        if(index.column() == 3) return THEME_VALUE(Theme_Type);
+        if(index.column() == 4) return THEME_VALUE(Theme_Symbol);
     }
 
     return QVariant();
 }
 
 int BlockListModel::columnCount(const QModelIndex&) const { return 5; }
-int BlockListModel::rowCount(const QModelIndex&) const { return r_doc->blocksCount(); }
+int BlockListModel::rowCount(const QModelIndex&) const { return m_blocks.size(); }
 
-QString BlockListModel::symbolName(const QModelIndex& index) const
+QString BlockListModel::blockType(const RDBlock* block) const
 {
-    const REDasm::BlockItem* bi = r_doc->blocks()->at(index.row());
-    const REDasm::Symbol* symbol = r_doc->symbol(bi->start);
-    if(symbol) return Convert::to_qstring(symbol->name);
+    switch(block->type)
+    {
+        case BlockType_Code:       return "CODE";
+        case BlockType_Data:       return "DATA";
+        case BlockType_Unexplored: return "UNEXPLORED";
+        default: break;
+    }
+
     return QString();
 }
 
-QString BlockListModel::segmentName(int section) const
+QString BlockListModel::symbolName(const RDBlock* block) const
 {
-    const REDasm::BlockItem* bi = r_doc->blocks()->at(section);
-    const REDasm::Segment* segment = r_doc->segment(bi->start);
-    if(segment) return Convert::to_qstring(segment->name());
-    return QString();
+    const char* name = RDDocument_GetSymbolName(m_document, block->address);
+    return name ? name : QString();
 }

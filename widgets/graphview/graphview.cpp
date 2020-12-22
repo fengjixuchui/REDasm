@@ -1,24 +1,25 @@
 #include "graphview.h"
-#include "../../convert.h"
+#include <rdapi/graph/layout.h>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <QScrollBar>
 #include <QPainter>
 #include <cmath>
+#include <iostream>
 
 GraphView::GraphView(QWidget *parent): QAbstractScrollArea(parent)
 {
     QPalette palette = this->palette();
-    palette.setColor(QPalette::Base, THEME_VALUE("graph_bg"));
+    palette.setColor(QPalette::Base, THEME_VALUE(Theme_GraphBg));
 
     this->horizontalScrollBar()->setSingleStep(this->fontMetrics().height());
     this->verticalScrollBar()->setSingleStep(this->fontMetrics().height());
+    this->setFrameShape(QFrame::NoFrame);
     this->setAutoFillBackground(true);
     this->setPalette(palette);
 }
 
-void GraphView::setDisassembler(const REDasm::DisassemblerPtr& disassembler) { m_disassembler = disassembler; }
-
-void GraphView::setGraph(REDasm::Graph* graph)
+void GraphView::setGraph(RDGraph* graph)
 {
     m_selecteditem = nullptr;
     m_scalefactor = m_scaleboost = 1.0;
@@ -28,7 +29,7 @@ void GraphView::setGraph(REDasm::Graph* graph)
     m_arrows.clear();
 
     m_graph = graph;
-    this->computeLayout();
+    this->computeGraph();
 }
 
 void GraphView::setSelectedBlock(GraphViewItem *item)
@@ -44,7 +45,7 @@ void GraphView::setSelectedBlock(GraphViewItem *item)
 
 void GraphView::setFocusOnSelection(bool b) { m_focusonselection = b; }
 GraphViewItem *GraphView::selectedItem() const { return m_selecteditem; }
-REDasm::Graph* GraphView::graph() const { return m_graph; }
+RDGraph* GraphView::graph() const { return m_graph; }
 void GraphView::focusSelectedBlock() { if(m_selecteditem) this->focusBlock(m_selecteditem); }
 
 void GraphView::focusBlock(const GraphViewItem *item, bool force)
@@ -72,7 +73,7 @@ void GraphView::focusBlock(const GraphViewItem *item, bool force)
     if(force || !viewportrect.contains(r))
     {
         auto x = (item->x() + static_cast<int>(item->width() / 2)) * m_scalefactor;
-        auto y = (item->y() + (2 * fm.height()) + (item->currentLine() * fm.height())) * m_scalefactor;
+        auto y = (item->y() + (2 * fm.height()) + (item->currentRow() * fm.height())) * m_scalefactor;
         this->horizontalScrollBar()->setValue(x + m_renderoffset.x() - static_cast<int>(this->horizontalScrollBar()->pageStep() / 2));
         this->verticalScrollBar()->setValue(y + m_renderoffset.y() - static_cast<int>(this->verticalScrollBar()->pageStep() / 2));
     }
@@ -85,9 +86,7 @@ void GraphView::mouseDoubleClickEvent(QMouseEvent* e)
     if(m_selecteditem && (e->buttons() == Qt::LeftButton))
         m_selecteditem->mouseDoubleClickEvent(e);
 
-    if(updated)
-        this->selectedItemChangedEvent();
-
+    if(updated) this->selectedItemChangedEvent();
     QAbstractScrollArea::mouseDoubleClickEvent(e);
 }
 
@@ -106,10 +105,7 @@ void GraphView::mousePressEvent(QMouseEvent *e)
     }
 
     this->viewport()->update();
-
-    if(updated)
-        this->selectedItemChangedEvent();
-
+    if(updated) this->selectedItemChangedEvent();
     QAbstractScrollArea::mousePressEvent(e);
 }
 
@@ -151,33 +147,36 @@ void GraphView::mouseMoveEvent(QMouseEvent *e)
     QAbstractScrollArea::mouseMoveEvent(e);
 }
 
-void GraphView::wheelEvent(QWheelEvent *e)
+void GraphView::wheelEvent(QWheelEvent *event)
 {
-    if(e->modifiers() & Qt::ControlModifier)
+    if(event->modifiers() & Qt::ControlModifier)
     {
-        m_scaleboost = e->modifiers() & Qt::ShiftModifier ? 2 : 1;
+        m_scaleboost = event->modifiers() & Qt::ShiftModifier ? 2 : 1;
 
-        if(e->delta() > 0)
+        QPoint ndegrees = event->angleDelta() / 8;
+        QPoint nsteps = ndegrees / 15;
+
+        if(nsteps.y() > 0)
         {
             m_scaledirection = 1;
-            this->zoomIn(e->pos());
+            this->zoomIn(event->pos());
         }
-        else if(e->delta() < 0)
+        else if(nsteps.y() < 0)
         {
             m_scaledirection = -1;
-            this->zoomOut(e->pos());
+            this->zoomOut(event->pos());
         }
 
-        e->accept();
+        event->accept();
         return;
     }
 
-    QAbstractScrollArea::wheelEvent(e);
+    QAbstractScrollArea::wheelEvent(event);
 }
 
 void GraphView::resizeEvent(QResizeEvent *e) { this->adjustSize(e->size().width(), e->size().height()); }
 
-void GraphView::paintEvent(QPaintEvent *e)
+void GraphView::paintEvent(QPaintEvent *)
 {
     QPoint translation = { m_renderoffset.x() - this->horizontalScrollBar()->value(),
                            m_renderoffset.y() - this->verticalScrollBar()->value() };
@@ -198,7 +197,7 @@ void GraphView::paintEvent(QPaintEvent *e)
 
     for(auto it = m_lines.begin(); it != m_lines.end(); it++)
     {
-        QColor c(Convert::to_qstring(m_graph->color(it->first)));
+        QColor c(RDGraph_GetColor(m_graph, std::addressof(it->first)));
         QPen pen(c);
 
         if(m_selecteditem && ((it->first.source == m_selecteditem->node()) || (it->first.target == m_selecteditem->node())))
@@ -227,9 +226,7 @@ void GraphView::paintEvent(QPaintEvent *e)
             continue;
 
         size_t itemstate = GraphViewItem::None;
-
-        if(m_selecteditem == item)
-            itemstate |= GraphViewItem::Selected;
+        if(m_selecteditem == item) itemstate |= GraphViewItem::Selected;
 
         item->render(&painter, itemstate);
     }
@@ -237,38 +234,72 @@ void GraphView::paintEvent(QPaintEvent *e)
 
 void GraphView::showEvent(QShowEvent *e)
 {
-    if(!m_viewportready)
-        m_viewportready = true;
-
+    if(!m_viewportready) m_viewportready = true;
     e->ignore();
 }
 
 void GraphView::selectedItemChangedEvent()
 {
-    if(m_focusonselection)
-        this->focusSelectedBlock();
-
+    if(m_focusonselection) this->focusSelectedBlock();
     emit selectedItemChanged();
 }
 
-void GraphView::computeLayout()
-{
-    m_graph->nodes().each([&](REDasm::Node n) {
-        m_items[n]->move(QPoint(m_graph->x(n), m_graph->y(n)));
-        connect(m_items[n], &GraphViewItem::invalidated, this->viewport(), [&]() { this->viewport()->update(); });
-    });
+void GraphView::computeEdge(const RDGraphEdge&) { }
+void GraphView::computeNode(GraphViewItem*) { }
 
-    m_graph->edges().each([&](const REDasm::Edge& e) {
+void GraphView::computed()
+{
+    auto it = m_items.find(RDGraph_GetRoot(m_graph));
+    if(it != m_items.end()) this->focusBlock(it.value());
+}
+
+void GraphView::computeLayout() { RDGraphLayout_Layered(m_graph, LayeredLayoutType_Medium); }
+
+void GraphView::computeGraph()
+{
+    RDGraphNode root = RDGraph_GetRoot(m_graph);
+
+    const RDGraphNode* nodes = nullptr;
+    size_t nc = RDGraph_GetNodes(m_graph, &nodes);
+
+    for(size_t i = 0; i < nc; i++)
+    {
+        RDGraphNode n = nodes[i];
+        auto* item = this->createItem(n, m_graph);
+        if(!item) continue;
+        if(n == root) m_selecteditem = item; // Focus on root
+
+        item->setParent(this); // Take Ownership
+        m_items[n] = item;
+        this->computeNode(item);
+
+        RDGraph_SetWidth(m_graph, item->node(), item->width());
+        RDGraph_SetHeight(m_graph, item->node(), item->height());
+    }
+
+    const RDGraphEdge* edges = nullptr;
+    size_t ec = RDGraph_GetEdges(m_graph, &edges);
+    for(size_t i = 0; i < ec; i++) this->computeEdge(edges[i]);
+
+    this->computeLayout();
+
+    for(size_t i = 0; i < nc; i++)
+    {
+        RDGraphNode n = nodes[i];
+        m_items[n]->move(QPoint(RDGraph_GetX(m_graph, n), RDGraph_GetY(m_graph, n)));
+        connect(m_items[n], &GraphViewItem::invalidated, this->viewport(), [&]() { this->viewport()->update(); });
+    }
+
+    for(size_t i = 0; i < ec; i++)
+    {
+        const RDGraphEdge& e = edges[i];
         this->precomputeLine(e);
         this->precomputeArrow(e);
-    });
+    }
 
     QSize areasize;
-
-    if(m_viewportready)
-        areasize = this->viewport()->size();
-    else
-        areasize = this->parentWidget()->size() - QSize(20, 20);
+    if(m_viewportready) areasize = this->viewport()->size();
+    else areasize = this->parentWidget()->size() - QSize(20, 20);
 
     qreal sx = static_cast<qreal>(areasize.width()) / static_cast<qreal>(this->width());
     qreal sy = static_cast<qreal>(areasize.height()) / static_cast<qreal>(this->height());
@@ -276,11 +307,12 @@ void GraphView::computeLayout()
 
     this->adjustSize(areasize.width(), areasize.height());
     this->viewport()->update();
+    this->computed();
 }
 
 GraphViewItem *GraphView::itemFromMouseEvent(QMouseEvent *e) const
 {
-    //Convert coordinates to system used in blocks
+    // Convert coordinates to system used in blocks
     int xofs = this->horizontalScrollBar()->value();
     int yofs = this->verticalScrollBar()->value();
 
@@ -289,9 +321,7 @@ GraphViewItem *GraphView::itemFromMouseEvent(QMouseEvent *e) const
 
     for(GraphViewItem* item : m_items)
     {
-        if(!item->contains(pos))
-            continue;
-
+        if(!item->contains(pos)) continue;
         e->setLocalPos(item->mapToItem(pos));
         return item;
     }
@@ -299,47 +329,41 @@ GraphViewItem *GraphView::itemFromMouseEvent(QMouseEvent *e) const
     return nullptr;
 }
 
-void GraphView::zoomOut(const QPoint &cursorpos)
+void GraphView::zoomOut(const QPointF &cursorpos)
 {
     m_prevscalefactor = m_scalefactor;
 
-    if(m_scalefactor <= m_scalemin)
-        return;
-
+    if(m_scalefactor <= m_scalemin) return;
     m_scalefactor *= (1 - m_scalestep * m_scaleboost);
 
-    if(m_scalefactor < m_scalemin)
-        m_scalefactor = m_scalemin;
+    if(m_scalefactor < m_scalemin) m_scalefactor = m_scalemin;
 
     QSize vpsize = this->viewport()->size();
     this->adjustSize(vpsize.width(), vpsize.height(), cursorpos);
     this->viewport()->update();
 }
 
-void GraphView::zoomIn(const QPoint &cursorpos)
+void GraphView::zoomIn(const QPointF &cursorpos)
 {
     m_prevscalefactor = m_scalefactor;
 
-    if(m_scalefactor >= m_scalemax)
-        return;
-
+    if(m_scalefactor >= m_scalemax) return;
     m_scalefactor /= (1 - m_scalestep * m_scaleboost);
 
-    if(m_scalefactor > m_scalemax)
-        m_scalefactor = m_scalemax;
+    if(m_scalefactor > m_scalemax) m_scalefactor = m_scalemax;
 
     QSize vpsize = this->viewport()->size();
     this->adjustSize(vpsize.width(), vpsize.height(), cursorpos);
     this->viewport()->update();
 }
 
-void GraphView::adjustSize(int vpw, int vph, const QPoint &cursorpos, bool fit)
+void GraphView::adjustSize(int vpw, int vph, const QPointF &cursorpos, bool fit)
 {
     //bugfix - resize event (during several initial calls) may reset correct adjustment already made
     if(!m_graph || (vph < 30))
         return;
 
-    m_rendersize = QSize(m_graph->areaWidth() * m_scalefactor, m_graph->areaHeight() * m_scalefactor);
+    m_rendersize = QSize(RDGraph_GetAreaWidth(m_graph) * m_scalefactor, RDGraph_GetAreaHeight(m_graph) * m_scalefactor);
     m_renderoffset = QPoint(vpw, vph);
 
     QSize scrollrange = { m_rendersize.width() + vpw, m_rendersize.height() + vph };
@@ -376,29 +400,32 @@ void GraphView::adjustSize(int vpw, int vph, const QPoint &cursorpos, bool fit)
     }
 }
 
-void GraphView::precomputeArrow(const REDasm::Edge& e)
+void GraphView::precomputeArrow(const RDGraphEdge& e)
 {
-    const REDasm::Polyline& path = m_graph->arrow(e);
+    const RDGraphPoint* path = nullptr;
+    size_t c = RDGraph_GetArrow(m_graph, &e, &path);
     QPolygon arrowhead;
 
-    for(size_t i = 0; i < path.size(); i++)
+    for(size_t i = 0; i < c; i++)
     {
-        const REDasm::Polyline::Point& p1 = path.p(i);
-        arrowhead << QPoint(p1.x, p1.y);
+        const RDGraphPoint& p = path[i];
+        arrowhead << QPoint(p.x, p.y);
     }
 
     m_arrows[e] = arrowhead;
 }
 
-void GraphView::precomputeLine(const REDasm::Edge& e)
+void GraphView::precomputeLine(const RDGraphEdge& e)
 {
-    const REDasm::Polyline& path = m_graph->routes(e);
+    const RDGraphPoint* path = nullptr;
+    size_t c = RDGraph_GetRoutes(m_graph, &e, &path);
+
     QVector<QLine> lines;
 
-    for(size_t i = 0; !path.empty() && (i < path.size() - 1); i++)
+    for(size_t i = 0; c && (i < c - 1); i++)
     {
-        const REDasm::Polyline::Point& p1 = path.p(i);
-        const REDasm::Polyline::Point& p2 = path.p(i + 1);
+        const RDGraphPoint& p1 = path[i];
+        const RDGraphPoint& p2 = path[i + 1];
         lines.push_back(QLine(p1.x, p1.y, p2.x, p2.y));
     }
 
@@ -414,10 +441,13 @@ bool GraphView::updateSelectedItem(QMouseEvent *e)
     {
         olditem->itemSelectionChanged(false);
         olditem->invalidate();
-     }
+    }
 
     if(m_selecteditem)
-        m_selecteditem->itemSelectionChanged(false);
+    {
+        m_selecteditem->itemSelectionChanged(true);
+        m_selecteditem->invalidate();
+    }
 
     return olditem != m_selecteditem;
 }

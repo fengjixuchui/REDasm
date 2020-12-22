@@ -1,5 +1,5 @@
 #include "gotofiltermodel.h"
-#include <redasm/disassembler/listing/document/listingdocument.h>
+#include <rdapi/rdapi.h>
 
 GotoFilterModel::GotoFilterModel(QObject *parent) : QSortFilterProxyModel(parent)
 {
@@ -8,20 +8,20 @@ GotoFilterModel::GotoFilterModel(QObject *parent) : QSortFilterProxyModel(parent
     this->setSourceModel(new GotoModel(this));
 }
 
-void GotoFilterModel::setDisassembler(const REDasm::DisassemblerPtr &disassembler) { static_cast<GotoModel*>(this->sourceModel())->setDisassembler(disassembler); }
+void GotoFilterModel::setContext(const RDContextPtr& ctx) { static_cast<GotoModel*>(this->sourceModel())->setContext(ctx); }
+const RDDocumentItem& GotoFilterModel::item(const QModelIndex& index) const { return static_cast<GotoModel*>(this->sourceModel())->item(this->mapToSource(index)); }
 
 bool GotoFilterModel::filterAcceptsRow(int sourcerow, const QModelIndex &sourceparent) const
 {
-    const GotoModel* gotomodel = static_cast<const GotoModel*>(this->sourceModel());
-    REDasm::ListingItem item = gotomodel->disassembler()->document()->items()->at(sourcerow);
-    if(!item.isValid()) return false;
+    auto* gotomodel = static_cast<const GotoModel*>(this->sourceModel());
+    const RDDocumentItem& item = gotomodel->item(sourcerow);
 
     switch(item.type)
     {
-        case REDasm::ListingItemType::SegmentItem:
-        case REDasm::ListingItemType::FunctionItem:
-        case REDasm::ListingItemType::SymbolItem:
-        case REDasm::ListingItemType::TypeItem:
+        case DocumentItemType_Segment:
+        case DocumentItemType_Function:
+        case DocumentItemType_Symbol:
+        case DocumentItemType_Type:
             return QSortFilterProxyModel::filterAcceptsRow(sourcerow, sourceparent);
 
         default: break;

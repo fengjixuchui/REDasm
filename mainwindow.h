@@ -2,12 +2,7 @@
 
 #include <QMainWindow>
 #include <QPushButton>
-#include <QFileInfo>
 #include <QLabel>
-#include <redasm/support/utils.h>
-#include <redasm/redasm.h>
-#include "widgets/disassemblerview/disassemblerview.h"
-#include "dialogs/loaderdialog/loaderdialog.h"
 
 namespace Ui {
 class MainWindow;
@@ -18,7 +13,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
     public:
-        explicit MainWindow(QWidget *parent = 0);
+        explicit MainWindow(QWidget *parent = nullptr);
         ~MainWindow();
 
     protected:
@@ -26,43 +21,23 @@ class MainWindow : public QMainWindow
         void dragEnterEvent(QDragEnterEvent* e) override;
         void dragMoveEvent(QDragMoveEvent* e) override;
         void dropEvent(QDropEvent* e) override;
-        bool eventFilter(QObject* obj, QEvent* e) override;
 
     private slots:
-        void onOpenClicked();
         void onSaveClicked();
         void onSaveAsClicked();
-        void onRecentFileClicked();
-        void onExitClicked();
         void onSignaturesClicked();
         void onResetLayoutClicked();
-        void onSettingsClicked();
-        void onBlocksClicked();
-        void onAboutClicked();
-        void checkDisassemblerStatus();
-        void showProblems();
-        void closeFile();
 
     private:
-        DisassemblerView* currentDisassemblerView() const;
-        REDasm::Disassembler* currentDisassembler() const;
+        void initializeConfig();
         void loadWindowState();
-        void loadRecents();
-        bool loadDatabase(const QString& filepath);
-        void load(const QString &filepath);
         void checkCommandLine();
-        void initShortcuts();
-        void setStandardActionsEnabled(bool b);
-        void showDisassemblerView(REDasm::Disassembler *disassembler);
-        void selectLoader(const REDasm::LoadRequest &request);
-        void setViewWidgetsVisible(bool b);
-        void configureWebEngine();
+        bool loadDatabase(const QString& filepath);
         bool canClose();
 
     private:
         Ui::MainWindow *ui;
         QLabel *m_lblstatus, *m_lblprogress, *m_lblstatusicon;
-        QFileInfo m_fileinfo;
         QStringList m_recents;
-        QPushButton* m_pbproblems;
+        QPushButton *m_pbproblems, *m_pbrenderer;
 };

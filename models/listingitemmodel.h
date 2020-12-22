@@ -1,37 +1,40 @@
 #pragma once
 
-#include <QList>
-#include "disassemblermodel.h"
-#include <redasm/disassembler/listing/document/listingdocument.h>
-#include <redasm/disassembler/listing/backend/listingitems.h>
+#include <vector>
+#include "contextmodel.h"
+#include <rdapi/document/document.h>
+#include <rdapi/events.h>
 
-class ListingItemModel : public DisassemblerModel
+class ListingItemModel : public ContextModel
 {
     Q_OBJECT
 
     public:
-        explicit ListingItemModel(REDasm::ListingItemType itemtype, QObject *parent = nullptr);
-        ~ListingItemModel();
-        void setDisassembler(const REDasm::DisassemblerPtr &disassembler) override;
-        REDasm::ListingItem item(const QModelIndex& index) const;
-        address_location address(const QModelIndex& index) const;
+        explicit ListingItemModel(rd_type itemtype, QObject *parent = nullptr);
+        virtual ~ListingItemModel();
+        void setContext(const RDContextPtr& disassembler) override;
+        const RDDocumentItem& item(size_t index) const;
+        const RDDocumentItem& item(const QModelIndex& index) const;
+        rd_type itemType() const;
 
     public:
-        QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
         int rowCount(const QModelIndex& = QModelIndex()) const override;
         int columnCount(const QModelIndex& = QModelIndex()) const override;
         QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
         QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     protected:
-        virtual bool isItemAllowed(const REDasm::ListingItem& item) const;
+        virtual bool isItemAllowed(const RDDocumentItem& item) const;
+        virtual void onItemChanged(const RDDocumentEventArgs* e);
+        virtual void onItemRemoved(const RDDocumentEventArgs* e);
+        virtual void insertItem(const RDDocumentItem& item);
 
     private:
-        void onListingChanged(const REDasm::EventArgs* e);
+        static QString escapeString(const QString& s);
 
     private:
-        REDasm::SortedList m_items;
-        REDasm::ListingItemType m_itemtype;
+        std::vector<RDDocumentItem> m_items;
+        rd_type m_itemtype;
 
     friend class ListingFilterModel;
 };

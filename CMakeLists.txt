@@ -3,34 +3,32 @@ cmake_minimum_required(VERSION 3.10)
 project(REDasm)
 
 set(QT_VERSION_REQ "5.9")
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-option(DEBUG_STL_ITERATORS      "Enable iterator debugging in Debug mode (GCC only)" OFF)
-option(ENABLE_ADDRESS_SANITIZER "Enable Address Sanitizer"                           OFF)
-option(ENABLE_THREAD_SANITIZER  "Enable Thread Sanitizer"                            OFF)
-option(PORTABLE_MODE            "Enable Portable Mode"                               OFF)
+include(${CMAKE_SOURCE_DIR}/LibREDasm/cmake/sanitizers.cmake)
+
+option(PORTABLE_MODE "Enable Portable Mode" OFF)
+option(BUILD_TESTS "Build tests" OFF)
 
 string(TIMESTAMP REDASM_BUILD_TIMESTAMP "%Y%m%d")
 set(REDASM_GIT_VERSION "unknown")
+set(REDASM_VERSION_BASE "3.0")
 
 if(PORTABLE_MODE)
     add_definitions(-DREDASM_PORTABLE_MODE=1)
 endif()
 
 if(UNIX)
-    set(CMAKE_SKIP_BUILD_RPATH FALSE)
-    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    set(CMAKE_INSTALL_RPATH ".")
+    #set(CMAKE_SKIP_BUILD_RPATH FALSE)
+    #set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+    #set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    #set(CMAKE_INSTALL_RPATH ".")
 endif()
 
-find_package(Qt5Core       CONFIG REQUIRED)
-find_package(Qt5Gui        CONFIG REQUIRED)
-find_package(Qt5Widgets    CONFIG REQUIRED)
-find_package(Qt5Concurrent CONFIG REQUIRED)
+find_package(Qt5 5.9 REQUIRED COMPONENTS Widgets)
 find_package(Git)
 
 if(GIT_FOUND)
@@ -44,46 +42,54 @@ else()
 endif()
 
 set(REDASM_BUILD_VERSION "${REDASM_BUILD_TIMESTAMP}.${REDASM_GIT_VERSION}")
-add_definitions(-DREDASM_VERSION="${REDASM_BUILD_VERSION}")
+add_definitions(-DREDASM_VERSION="${REDASM_VERSION_BASE}-${REDASM_BUILD_VERSION}")
 
 add_subdirectory(LibREDasm)
 add_subdirectory(QHexView)
 
 # FindREDasm.config
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/LibREDasm/redasm")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/LibREDasm/rdapi")
 
 add_subdirectory(submodules/plugins)
 add_subdirectory(submodules/assemblers)
 add_subdirectory(submodules/loaders)
 
-if((CMAKE_BUILD_TYPE MATCHES Debug) OR (CMAKE_BUILD_TYPE MATCHES RelWithDebInfo))
+if(BUILD_TESTS)
     add_subdirectory(unittest)
 endif()
 
 QT5_WRAP_UI(UI_HDRS ${UI_FILES})
 
 # Widgets
-file(GLOB_RECURSE WIDGETS_HEADERS widgets/*.h)
-file(GLOB_RECURSE WIDGETS_SOURCES widgets/*.cpp)
-file(GLOB_RECURSE WIDGETS_UIS     widgets/*.ui)
+file(GLOB_RECURSE WIDGETS_HEADERS CONFIGURE_DEPENDS widgets/*.h )
+file(GLOB_RECURSE WIDGETS_SOURCES CONFIGURE_DEPENDS widgets/*.cpp)
+file(GLOB_RECURSE WIDGETS_UIS CONFIGURE_DEPENDS widgets/*.ui)
 
 # Dialogs
-file(GLOB_RECURSE DIALOGS_HEADERS dialogs/*.h)
-file(GLOB_RECURSE DIALOGS_SOURCES dialogs/*.cpp)
-file(GLOB_RECURSE DIALOGS_UIS     dialogs/*.ui)
+file(GLOB_RECURSE DIALOGS_HEADERS CONFIGURE_DEPENDS dialogs/*.h)
+file(GLOB_RECURSE DIALOGS_SOURCES CONFIGURE_DEPENDS dialogs/*.cpp)
+file(GLOB_RECURSE DIALOGS_UIS CONFIGURE_DEPENDS dialogs/*.ui)
 
 # Models
-file(GLOB_RECURSE MODELS_HEADERS models/*.h)
-file(GLOB_RECURSE MODELS_SOURCES models/*.cpp)
+file(GLOB_RECURSE MODELS_HEADERS CONFIGURE_DEPENDS models/*.h)
+file(GLOB_RECURSE MODELS_SOURCES CONFIGURE_DEPENDS models/*.cpp)
+
+# Delegates
+file(GLOB_RECURSE DELEGATES_HEADERS CONFIGURE_DEPENDS delegates/*.h)
+file(GLOB_RECURSE DELEGATES_SOURCES CONFIGURE_DEPENDS delegates/*.cpp)
 
 # Renderer
-file(GLOB_RECURSE RENDERER_HEADERS renderer/*.h)
-file(GLOB_RECURSE RENDERER_SOURCES renderer/*.cpp)
+file(GLOB_RECURSE RENDERER_HEADERS CONFIGURE_DEPENDS renderer/*.h)
+file(GLOB_RECURSE RENDERER_SOURCES CONFIGURE_DEPENDS renderer/*.cpp)
+
+# Hooks
+file(GLOB_RECURSE HOOKS_HEADERS CONFIGURE_DEPENDS hooks/*.h)
+file(GLOB_RECURSE HOOKS_SOURCES CONFIGURE_DEPENDS hooks/*.cpp)
 
 # UI
-file(GLOB_RECURSE UI_HEADERS ui/*.h)
-file(GLOB_RECURSE UI_SOURCES ui/*.cpp)
-file(GLOB_RECURSE UI_UIS ui/*.ui)
+file(GLOB_RECURSE UI_HEADERS CONFIGURE_DEPENDS ui/*.h)
+file(GLOB_RECURSE UI_SOURCES CONFIGURE_DEPENDS ui/*.cpp)
+file(GLOB_RECURSE UI_UIS CONFIGURE_DEPENDS ui/*.ui)
 
 SET(HEADERS
     ${QHEXVIEW_HEADERS}
@@ -91,13 +97,15 @@ SET(HEADERS
     ${WIDGETS_HEADERS}
     ${DIALOGS_HEADERS}
     ${MODELS_HEADERS}
+    ${DELEGATES_HEADERS}
+    ${HOOKS_HEADERS}
     ${RENDERER_HEADERS}
     ${UI_HEADERS}
-    convert.h
     mainwindow.h
     themeprovider.h
     redasmsettings.h
-    disassembleractions.h)
+    redasmfonts.h
+)
 
 SET(SOURCES
     ${QHEXVIEW_SOURCES}
@@ -105,23 +113,28 @@ SET(SOURCES
     ${WIDGETS_SOURCES}
     ${DIALOGS_SOURCES}
     ${MODELS_SOURCES}
+    ${DELEGATES_SOURCES}
+    ${HOOKS_SOURCES}
     ${RENDERER_SOURCES}
     ${UI_SOURCES}
     main.cpp
     mainwindow.cpp
     themeprovider.cpp
     redasmsettings.cpp
-    disassembleractions.cpp)
+    redasmfonts.cpp
+)
 
 set(FORMS
     ${WIDGETS_UIS}
     ${DIALOGS_UIS}
     ${UI_UIS}
-    mainwindow.ui)
+    mainwindow.ui
+)
 
 set(RESOURCES
     resources.qrc
-    themes.qrc)
+    themes.qrc
+)
 
 if(WIN32)
     SET(GUI_TYPE WIN32)
@@ -132,33 +145,67 @@ add_executable(${PROJECT_NAME} ${GUI_TYPE}
                ${HEADERS}
                ${FORMS}
                ${RESOURCES}
-               ${CMAKE_SOURCE_DIR}/res/windows/resources.rc)
+               ${CMAKE_SOURCE_DIR}/res/windows/resources.rc
+)
 
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} LibREDasm QHexEdit)
-add_dependencies(${PROJECT_NAME} LibREDasm)
+# TODO: refactor this to target_include_directories(target PUBLIC ...) in the submodules
+target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        LibREDasm
+        QHexEdit
+)
 
-if(WIN32)
-    target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Gui Qt5::Widgets LibREDasm)
-else()
-    target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Gui Qt5::Widgets pthread LibREDasm)
-endif()
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt5::Core
+    Qt5::Gui
+    Qt5::Widgets
+    LibREDasm
+)
 
-if(("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND DEBUG_STL_ITERATORS)
-    target_compile_options(${PROJECT_NAME} PRIVATE -D_GLIBCXX_DEBUG)
-elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+# Include Threads
+# TODO: perhaps this should be a PUBLIC dependency of LibREDasm?
+find_package(Threads REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wno-missing-braces)
 endif()
 
-if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    if(ENABLE_ADDRESS_SANITIZER)
-        target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-        target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-    elseif(ENABLE_THREAD_SANITIZER)
-        target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
-        target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+# Post build commands
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:LibREDasm> ${CMAKE_BINARY_DIR})
+if(NOT WIN32)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E create_symlink submodules plugins)
+endif()
+
+# Deploy Qt DLLs on Windows
+# https://stackoverflow.com/a/41199492/1806760
+if(Qt5_FOUND AND WIN32 AND TARGET Qt5::qmake AND NOT TARGET Qt5::windeployqt)
+    get_target_property(_qt5_qmake_location Qt5::qmake IMPORTED_LOCATION)
+
+    execute_process(
+        COMMAND "${_qt5_qmake_location}" -query QT_INSTALL_PREFIX
+        RESULT_VARIABLE return_code
+        OUTPUT_VARIABLE qt5_install_prefix
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    set(imported_location "${qt5_install_prefix}/bin/windeployqt.exe")
+
+    if(EXISTS ${imported_location})
+        add_executable(Qt5::windeployqt IMPORTED)
+
+        set_target_properties(Qt5::windeployqt PROPERTIES
+            IMPORTED_LOCATION ${imported_location}
+        )
     endif()
 endif()
 
-# Post build commands
-set(LIBREDASM_BIN ${CMAKE_BINARY_DIR}/LibREDasm/LibREDasm${CMAKE_SHARED_LIBRARY_SUFFIX})
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${LIBREDASM_BIN} ${CMAKE_BINARY_DIR})
+if(TARGET Qt5::windeployqt)
+    # execute windeployqt in a tmp directory after build
+    add_custom_command(TARGET ${PROJECT_NAME}
+        POST_BUILD
+        COMMAND Qt5::windeployqt "$<TARGET_FILE:${PROJECT_NAME}>"
+    )
+
+    # TODO: installation
+endif()

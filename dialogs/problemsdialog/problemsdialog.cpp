@@ -1,22 +1,19 @@
 #include "problemsdialog.h"
 #include "ui_problemsdialog.h"
-#include "../../convert.h"
 #include <QStandardItemModel>
-#include <redasm/context.h>
+#include <rdapi/rdapi.h>
 
-ProblemsDialog::ProblemsDialog(QWidget *parent) : QDialog(parent), ui(new Ui::ProblemsDialog)
+ProblemsDialog::ProblemsDialog(const RDContextPtr& ctx, QWidget *parent) : QDialog(parent), ui(new Ui::ProblemsDialog), m_context(ctx)
 {
     ui->setupUi(this);
+    m_problemsmodel = new QStandardItemModel(ui->lvProblems);
 
-    QStandardItemModel* m = new QStandardItemModel(ui->lvProblems);
+    RDContext_GetProblems(ctx.get(), [](const char* s, void* userdata) {
+        ProblemsDialog* thethis = reinterpret_cast<ProblemsDialog*>(userdata);
+        thethis->m_problemsmodel->appendRow(new QStandardItem(s));
+    }, this);
 
-    for(const REDasm::String& problem : r_ctx->problems())
-        m->appendRow(new QStandardItem(Convert::to_qstring(problem)));
-
-    ui->lvProblems->setModel(m);
+    ui->lvProblems->setModel(m_problemsmodel);
 }
 
-ProblemsDialog::~ProblemsDialog()
-{
-    delete ui;
-}
+ProblemsDialog::~ProblemsDialog() { delete ui; }
